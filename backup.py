@@ -1,4 +1,14 @@
-# instructions from: # https://developers.google.com/drive/v3/web/quickstart/python
+"""
+    Google drive python cli
+    initial instrucitons from
+    https://developers.google.com/drive/v3/web/quickstart/python
+
+    classes:
+    
+        File_object - handler for a file both on drive and on local
+        Drive - handler for the connection to google drive
+        Local - handler for the connection to local files
+"""
 
 from __future__ import print_function
 import httplib2
@@ -24,9 +34,14 @@ APPLICATION_NAME = 'Drive API Python Quickstart'
 """
     an object for a particular file or folder in google drive
 """
-class Drive_object():
+class File_object():
     def __init__(self, drive, json):
-        self.drive = drive #backwards link to the drive object
+        #backwards link to the drive object
+        self.drive = drive 
+
+        #reference to local object
+        if self.drive and self.drive.local: self.local = self.drive.local
+
         self.json = json
         self.id = json.get('id')
         self.name = json.get('name')
@@ -36,6 +51,11 @@ class Drive_object():
 
         self.trashed = json.get('trashed')
         self.parents= json.get('parents')
+
+        #self.check_local()
+
+        #resolved path in the file tree
+        self.path = "" 
 
     #ls wrapper so ls can be called on an oject and its children will be returned
     def ls(self):
@@ -50,8 +70,21 @@ class Drive_object():
         if details: string += "%s\t " % self.trashed
         if details: string += "%s\t " % self.parents
         if self.folder: string += "D "
+        string += "%s\t " % self.path
         string += "%s\t " % self.name
         return string
+
+    # sets the parent oject that caled LS to this object in order to build up a folder structure
+    def set_parent(self, parent):
+        self.parent = parent
+        self.path += parent.path + parent.name + "/"
+
+    #def check_local(self):
+    #    if self.
+
+class Local():
+    def __init__(self, root):
+        self.root = root
 
 """
     the connection and commands to google drive
@@ -62,10 +95,12 @@ class Drive():
     Creates a Google Drive API service object and outputs the names and IDs
     for up to 10 files.
     """
-    def __init__(self):
+    def __init__(self, local=None):
         credentials = self.get_credentials()
         http = credentials.authorize(httplib2.Http())
         self.service = discovery.build('drive', 'v3', http=http)
+
+        self.local=local
 
     def get_credentials(self):
         """Gets valid user credentials from storage.
@@ -123,7 +158,7 @@ class Drive():
                 fields='nextPageToken, files(id, name, mimeType, trashed, parents)',
                 pageToken=page_token).execute()
             for file in response.get('files', []):
-                f = Drive_object(self,file)
+                f = File_object(self,file)
                 if trash or not f.trashed:
                     self.file_list.append(f)
 
@@ -141,7 +176,10 @@ class Drive():
 
     def ls(self, obj):
         if obj.folder:
-            return self.search("'%s' in parents" % obj.id)
+            results = self.search("'%s' in parents" % obj.id)
+            for i in results:
+                i.set_parent(obj)
+            return results
         else:
             return None
         
@@ -155,7 +193,8 @@ class Drive():
     
 
 if __name__ == '__main__':
-    g = Drive()
+    local = "../gdrive_humans/00 GDRIVE_NEW/"
+    g = Drive(local = local)
     root =  g.get_root() 
 
     result = root.ls()
