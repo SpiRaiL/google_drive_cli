@@ -25,21 +25,31 @@ APPLICATION_NAME = 'Drive API Python Quickstart'
     an object for a particular file or folder in google drive
 """
 class Drive_object():
-    def __init__(self, json):
+    def __init__(self, drive, json):
+        self.drive = drive #backwards link to the drive object
         self.json = json
         self.id = json.get('id')
         self.name = json.get('name')
+
         self.mimeType = json.get('mimeType')
+        self.folder = (self.mimeType == 'application/vnd.google-apps.folder')
+
         self.trashed = json.get('trashed')
         self.parents= json.get('parents')
 
-    def as_string(self):
+    #ls wrapper so ls can be called on an oject and its children will be returned
+    def ls(self):
+        self.ls = self.drive.ls(self)
+        return self.ls
+
+    def as_string(self, details=False, json=False):
         string = ""
-        #string += "%s\t " % self.json
-        string += "%s\t " % self.id
-        string += "%s\t " % self.mimeType
-        string += "%s\t " % self.trashed
-        string += "%s\t " % self.parents
+        if json: string += "%s\t " % self.json
+        if details: string += "%s\t " % self.id
+        if details: string += "%s\t " % self.mimeType
+        if details: string += "%s\t " % self.trashed
+        if details: string += "%s\t " % self.parents
+        if self.folder: string += "D "
         string += "%s\t " % self.name
         return string
 
@@ -91,8 +101,8 @@ class Drive():
         if name is None:
             name = "00 GDRIVE_NEW"
         results = self.search_name(name)
-        result = results[0].id
-        return result
+        self.root = results[0]
+        return self.root
 
     def search_name(self, name, contains= False, **kargs):
         #resolve wild cards
@@ -113,7 +123,7 @@ class Drive():
                 fields='nextPageToken, files(id, name, mimeType, trashed, parents)',
                 pageToken=page_token).execute()
             for file in response.get('files', []):
-                f = Drive_object(file)
+                f = Drive_object(self,file)
                 if trash or not f.trashed:
                     self.file_list.append(f)
 
@@ -129,14 +139,18 @@ class Drive():
         print ("files found: %s" % len(self.file_list))
         return self.file_list
 
-    def list_dir(self, id):
-        return self.search("'%s' in parents" % id)
+    def ls(self, obj):
+        if obj.folder:
+            return self.search("'%s' in parents" % obj.id)
+        else:
+            return None
+        
 
     @staticmethod
-    def as_string(objects):
+    def as_string(objects, tab=0):
         string = ""
         for i in objects:
-            string += "%s\n" % i.as_string()
+            string += "%s%s\n" % ("\t"*tab, i.as_string())
         return string
     
 
@@ -144,10 +158,10 @@ if __name__ == '__main__':
     g = Drive()
     root =  g.get_root() 
 
-    result = g.list_dir(root)
+    result = root.ls()
     print(Drive.as_string(result))
 
-    #import pprint
-    #pp = pprint.PrettyPrinter(indent=4)
-    #pp.pprint( result ) 
+    for i in result:
+        print(i.as_string())
+        print(Drive.as_string(i.ls(),tab=1))
 
