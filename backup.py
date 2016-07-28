@@ -40,7 +40,10 @@ class File_object():
         self.drive = drive 
 
         #reference to local object
-        if self.drive and self.drive.local: self.local = self.drive.local
+        if self.drive and self.drive.local: 
+            self.local = self.drive.local
+        else:
+            self.local = None
 
         self.json = json
         self.id = json.get('id')
@@ -56,6 +59,7 @@ class File_object():
 
         #resolved path in the file tree
         self.path = "" 
+        self.local_path = "" 
 
     #ls wrapper so ls can be called on an oject and its children will be returned
     def ls(self):
@@ -69,8 +73,9 @@ class File_object():
         if details: string += "%s\t " % self.mimeType
         if details: string += "%s\t " % self.trashed
         if details: string += "%s\t " % self.parents
-        if self.folder: string += "D "
-        string += "%s\t " % self.path
+        if self.folder: string += "D " 
+        if self.local: string += "E "
+        string += "%s\t " % self.local_path
         string += "%s\t " % self.name
         return string
 
@@ -78,9 +83,13 @@ class File_object():
     def set_parent(self, parent):
         self.parent = parent
         self.path += parent.path + parent.name + "/"
+        self.local_path = "%s%s" % (self.local.root,self.path)
 
-    #def check_local(self):
-    #    if self.
+    # check if the local file exists
+    def check_local(self):
+        #if not self.path: return False
+        self.local = (self.path and os.path.exists(self.local_path))
+        return self.local
 
 class Local():
     def __init__(self, root):
@@ -100,7 +109,7 @@ class Drive():
         http = credentials.authorize(httplib2.Http())
         self.service = discovery.build('drive', 'v3', http=http)
 
-        self.local=local
+        self.local=Local(local)
 
     def get_credentials(self):
         """Gets valid user credentials from storage.
@@ -179,6 +188,7 @@ class Drive():
             results = self.search("'%s' in parents" % obj.id)
             for i in results:
                 i.set_parent(obj)
+                i.check_local()
             return results
         else:
             return None
@@ -193,7 +203,7 @@ class Drive():
     
 
 if __name__ == '__main__':
-    local = "../gdrive_humans/00 GDRIVE_NEW/"
+    local = "gdrive_humans/"
     g = Drive(local = local)
     root =  g.get_root() 
 
