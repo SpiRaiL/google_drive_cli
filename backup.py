@@ -249,7 +249,8 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
-    def check(self, directory, depth = 0, max_depth = 1, new_only=False, force = False, silent = False):
+    def check(self, directory, max_depth = 1, force = False, silent = False):
+        self.check_ready = False
         objects = [directory,]
         object_pointer = 0
 
@@ -273,7 +274,10 @@ class Drive():
                 for f in ls:
                     objects.append(f)
 
-        print("files found at depth: %s" % counters)
+        if not silent:
+            print("files found at depth: %s" % counters)
+
+        self.check_ready = True
 
         
     def as_string(self, objects = None, tab=0, new_line=0, *args, **kargs):
@@ -295,11 +299,11 @@ class CLI():
             'pwd': self.show_pwd, 
             'ls': self.show_ls, 
             'cd': self.change_dir, 
-            'vcheck': self.check,
             'check': self.background_check,
 
                 }
 
+        self.auto_check = True
         self.prompt = " H> " 
         self.drive = drive
         self.root =  g.get_root() 
@@ -314,54 +318,30 @@ class CLI():
     """
         runs check on the drive as a seperate thread that that builds up the file structure in the back ground
     """
-    def background_check(self, stop = None, depth = None):
+    def background_check(self, stop = None, depth = None, force = None):
         if depth is None:
             depth = 4
             for i in self.ui:
                 if isinstance(i,int): depth = i
 
         if stop is None: stop = "stop" in self.ui 
-        #clear = "clear" in self.ui 
+        if force is None: force = "force" in self.ui 
+
+        if "auto_off" in self.ui: self.auto_check = False
+        if "auto_on" in self.ui: self.auto_check = True
 
         def threadded_check(drive, pwd, depth):
-
-            drive.check_ready = False
-
-            drive.check( pwd, silent = True, max_depth = depth)
-
-            drive.check_ready = True
-
+            drive.check( pwd, silent = False, max_depth = depth)
 
         self.drive.wait_for_ready()
 
-        if not stop:
+        if not stop and self.auto_check:
             print("starting background check")
             thread.start_new_thread(threadded_check, (self.drive, self.pwd, depth))
 
 
-    """
-        blocking check method 
-    """
-    def check(self):
-        force = ("force" in self.ui) or ("refresh" in self.ui)
-        silent = ("silent" in self.ui) or ("quiet" in self.ui) or ("q" in self.ui)
-        depth = 1
-        for i in self.ui:
-            if isinstance(i,int): depth = i
-
-        print("checking for diffs, press control+c to cancel")
-        try:
-            self.drive.check( self.pwd, 
-                new_only = "new" in self.ui, 
-                max_depth = depth, force = force,
-                silent = silent,
-                )
-        except KeyboardInterrupt: #detects control+c
-            pass
-
-
     def change_dir(self):
-        if len(self.ui) < 2: next_dir = "/" 
+        if len(self.ui) < 2: return
         else: next_dir = "%s" % self.ui[1]
 
         if ".." in next_dir:
