@@ -55,6 +55,7 @@ class File_object():
         self.trashed = json.get('trashed')
         self.parents= json.get('parents')
         self.parent = None
+        self.children = None
 
         #self.check_local()
 
@@ -64,7 +65,8 @@ class File_object():
 
     #ls wrapper so ls can be called on an oject and its children will be returned
     def ls(self,*args, **kargs):
-        return self.drive.ls(self,*args, **kargs)
+        self.children = self.drive.ls(self,*args, **kargs)
+        return self.children
 
     def ls_string(self, *args, **kargs):
         return self.drive.as_string(self.ls(),*args, **kargs)
@@ -190,14 +192,13 @@ class Drive():
                 print ("file limit reached")
                 break;
 
-        print ("files found: %s" % len(self.file_list))
+        #print ("files found: %s" % len(self.file_list))
         return self.file_list
 
     def ls(self, obj):
         if obj.folder:
             results = self.search("'%s' in parents" % obj.id)
             results.sort(key=lambda x: (not x.folder,x.name), reverse=False)
-            #results.sort(key=lambda x: (x.folder,x.name), reverse=False)
             for i in results:
                 i.set_parent(obj)
                 i.check_local()
@@ -207,6 +208,27 @@ class Drive():
 
     def __str__(self):
         return self.as_string()
+
+    def check(self, directory, depth = 0, max_depth = 0, new_only=False):
+        exists = []
+        new = []
+        ls = directory.ls()
+
+        if ls is None or depth>=max_depth: return ([],[])
+
+        for f in ls:
+            (e,n) = self.check(f,depth = depth+1, max_depth = max_depth)
+            exists.extend(e)
+            new.extend(n)
+            if f.local:
+               exists.append(f)
+            else:
+               new.append(f)
+            if f.folder and (not new_only or f.local):
+                print("%s (%s,%s) %s%s" % 
+                        (" " if f.local else "N", len(exists),len(new), "\t"*depth, f.name))
+           
+        return (exists, new)
         
     def as_string(self, objects = None, tab=0, new_line=0):
         if objects is None:
@@ -221,32 +243,49 @@ class Drive():
 class CLI():
     def __init__(self, drive):
         self.options = {
+            '': self.do_nothing, 
             'q': self.end_run,
             'exit': self.end_run,
             'pwd': self.show_pwd, 
             'ls': self.show_ls, 
             'cd': self.change_dir, 
-            '': self.do_nothing, 
+            'check': self.check,
 
                 }
 
         self.prompt = " D > " 
         self.drive = drive
-        self.pwd =  g.get_root() 
+        self.root =  g.get_root() 
+        self.pwd =  self.root
         self.show_ls()
 
     def do_nothing(self):
         pass
 
+    def check(self):
+        depth = 0
+        for i in self.ui:
+            if isinstance(i,int): depth = i
+
+        self.drive.check( self.pwd, 
+                new_only = "new" in self.ui, max_depth = depth)
+
     def change_dir(self):
-        if ".." in self.next_dir:
+        next_dir = self.ui[1]
+        if ".." in next_dir:
             if self.pwd.parent is None:
                 print("no parent")
                 return
-            print("changing to: %s" % self.pwd.name)
             self.pwd = self.pwd.parent
+            print("changing to: %s" % self.pwd.name)
             self.show_ls(tab=1,new_line = 1)
 
+            return
+
+        if "/" in next_dir:
+            self.pwd = self.root
+            print("changing to: %s" % self.pwd.name)
+            self.show_ls(tab=1,new_line = 1)
             return
 
         #get the list
@@ -254,12 +293,10 @@ class CLI():
         
         if ls is None:
             print("failed to get dirs")
-            
 
         for i in ls:
-            #print("checking: %s in %s" % ( self.next_dir.lower(), i.name.lower()))
-            if self.next_dir.lower() in i.name.lower():
-                print("changing to %s (matched %s)"  % (i.name,self.next_dir))
+            if next_dir.lower() in i.name.lower():
+                print("changing to %s (matched %s)"  % (i.name,next_dir))
                 self.pwd = i
 
                 self.show_ls(tab=1,new_line = 1)
@@ -280,16 +317,21 @@ class CLI():
     def run(self):
         self.end = False
         while not self.end :
-            ui = raw_input(self.prompt)
+            self.ui = raw_input(self.prompt).split()
 
-            if len(ui)>2 and ui[:2] == 'cd':
-                self.next_dir = ui[3:]
-                ui = ui[:2]
+            # make ints out of int arguements
+            for i,v in enumerate(self.ui):
+                try:
+                    self.ui[i] = int(v)
+                except:
+                    pass
+
+            #print(self.ui)
 
             try:
-                function = self.options[ui]
+                function = self.options[self.ui[0]]
             except:
-                print("command unknonw")
+                print("command unknown")
                 function = None
 
             if function: function()
