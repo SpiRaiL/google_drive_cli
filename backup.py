@@ -13,6 +13,8 @@
 from __future__ import print_function
 import httplib2
 import os
+import thread
+
 
 from apiclient import discovery
 import oauth2client
@@ -124,6 +126,9 @@ class Drive():
 
         self.local=Local(local)
 
+        self.check_interrupt = False
+        self.check_ready = True
+
     def get_credentials(self):
         """Gets valid user credentials from storage.
     
@@ -188,6 +193,7 @@ class Drive():
             if page_token is None:
                 break;
             else:
+                pass
                 #print ("found: %s files" % len(self.file_list))
             if len(self.file_list) > result_limit:
                 print ("file limit reached")
@@ -211,11 +217,14 @@ class Drive():
         return self.as_string()
 
     def check(self, directory, depth = 0, max_depth = 1, new_only=False, force = False, silent = False):
+
+        if self.check_interrupt or depth>=max_depth: return ([],[])
+
         exists = []
         new = []
         ls = directory.ls(force = force)
 
-        if ls is None or depth>=max_depth: return ([],[])
+        if ls is None: return ([],[])
 
         for f in ls:
             (e,n) = self.check(f,depth = depth+1, max_depth = max_depth, silent = silent)
@@ -252,40 +261,90 @@ class CLI():
             'pwd': self.show_pwd, 
             'ls': self.show_ls, 
             'cd': self.change_dir, 
-            'check': self.check,
+            'vcheck': self.check,
+            'check': self.background_check,
 
                 }
 
-        self.prompt = " D > " 
+        self.prompt = " H> " 
         self.drive = drive
         self.root =  g.get_root() 
         self.pwd =  self.root
         self.ui = []
         self.show_ls()
+        self.background_check()
 
     def do_nothing(self):
         pass
 
+    """
+        runs check on the drive as a seperate thread that that builds up the file structure in the back ground
+    """
+    def background_check(self, stop = None, depth = None):
+        if depth is None:
+            depth = 4
+            for i in self.ui:
+                if isinstance(i,int): depth = i
+
+        if stop is None: stop = "stop" in self.ui 
+        #clear = "clear" in self.ui 
+
+        def threadded_check(drive, pwd, depth):
+            (exists,new) = drive.check( pwd, silent = True, max_depth = depth)
+            print(" found files in %s = %s, (exists: %s, new: %s) depth = %s" % (
+                pwd.name,
+                len(exists) + len(new),
+                len(exists), len(new), 
+                depth,
+                ))
+            drive.check_ready = True
+
+        if not self.drive.check_ready:
+            print("stoppping background check")
+            self.drive.check_interrupt = True
+
+        if not stop:
+            counter = 0
+            while not self.drive.check_ready:
+                counter += 1
+
+            if counter:
+                print('wait counter: %s' % counter)
+
+            self.drive.check_interrupt = False
+
+            print("starting background check")
+            self.drive.check_ready = False
+            thread.start_new_thread(threadded_check, (self.drive, self.pwd, depth))
+
+            
+
+
+    """
+        blocking check method 
+    """
     def check(self):
-        force = "force" in self.ui
+        force = ("force" in self.ui) or ("refresh" in self.ui)
         silent = ("silent" in self.ui) or ("quiet" in self.ui) or ("q" in self.ui)
         depth = 1
         for i in self.ui:
             if isinstance(i,int): depth = i
 
         print("checking for diffs, press control+c to cancel")
-
         try:
             self.drive.check( self.pwd, 
                 new_only = "new" in self.ui, 
                 max_depth = depth, force = force,
-                silent = silent
+                silent = silent,
                 )
         except KeyboardInterrupt: #detects control+c
             pass
 
+
     def change_dir(self):
-        next_dir = "%s" % self.ui[1]
+        if len(self.ui) < 2: next_dir = "/" 
+        else: next_dir = "%s" % self.ui[1]
+
         if ".." in next_dir:
             if self.pwd.parent is None:
                 print("no parent")
@@ -303,6 +362,9 @@ class CLI():
             return
 
         #get the list
+        if self.pwd.children is None:
+            self.background_check(stop=True)
+
         ls = self.pwd.ls()
         
         if ls is None:
@@ -313,7 +375,9 @@ class CLI():
                 print("changing to %s (matched %s)"  % (i.name,next_dir))
                 self.pwd = i
 
+                self.background_check(depth = 4)
                 self.show_ls(tab=1,new_line = 1)
+
                 return
 
         print("no dir matched")
@@ -333,15 +397,17 @@ class CLI():
         self.end = False
         while not self.end :
             self.ui = raw_input(self.prompt).split()
+            #self.background_check(stop=True)
 
             if not self.ui: continue
 
             # make ints out of int arguements
-            for i,v in enumerate(self.ui):
-                try:
-                    self.ui[i] = int(v)
-                except:
-                    pass
+            if self.ui[0] != "cd":
+                for i,v in enumerate(self.ui):
+                    try:
+                        self.ui[i] = int(v)
+                    except:
+                        pass
 
             #print(self.ui)
 
