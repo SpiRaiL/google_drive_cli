@@ -64,12 +64,13 @@ class File_object():
         self.local_path = "" 
 
     #ls wrapper so ls can be called on an oject and its children will be returned
-    def ls(self,*args, **kargs):
-        self.children = self.drive.ls(self,*args, **kargs)
+    def ls(self, force = False, *args, **kargs):
+        if not self.children or force:
+            self.children = self.drive.ls(self,*args, **kargs)
         return self.children
 
     def ls_string(self, *args, **kargs):
-        return self.drive.as_string(self.ls(),*args, **kargs)
+        return self.drive.as_string(self.ls(*args, **kargs))
 
     def pwd_string(self):
         return self.path + self.name
@@ -195,7 +196,7 @@ class Drive():
         #print ("files found: %s" % len(self.file_list))
         return self.file_list
 
-    def ls(self, obj):
+    def ls(self, obj, *args, **kargs):
         if obj.folder:
             results = self.search("'%s' in parents" % obj.id)
             results.sort(key=lambda x: (not x.folder,x.name), reverse=False)
@@ -209,28 +210,30 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
-    def check(self, directory, depth = 0, max_depth = 0, new_only=False):
+    def check(self, directory, depth = 0, max_depth = 1, new_only=False, force = False):
         exists = []
         new = []
-        ls = directory.ls()
+        ls = directory.ls(force = force)
 
         if ls is None or depth>=max_depth: return ([],[])
 
         for f in ls:
             (e,n) = self.check(f,depth = depth+1, max_depth = max_depth)
+            if f.folder and (not new_only or f.local):
+                if e or n: summary = "(%s,%s)" % (len(e), len(n))
+                else: summary = "     "
+                print("%s %s %s%s" % 
+                        (" " if f.local else "N", summary, "\t"*depth, f.name))
             exists.extend(e)
             new.extend(n)
             if f.local:
                exists.append(f)
             else:
                new.append(f)
-            if f.folder and (not new_only or f.local):
-                print("%s (%s,%s) %s%s" % 
-                        (" " if f.local else "N", len(exists),len(new), "\t"*depth, f.name))
            
         return (exists, new)
         
-    def as_string(self, objects = None, tab=0, new_line=0):
+    def as_string(self, objects = None, tab=0, new_line=0, *args, **kargs):
         if objects is None:
             objects = self.file_list
 
@@ -257,21 +260,23 @@ class CLI():
         self.drive = drive
         self.root =  g.get_root() 
         self.pwd =  self.root
+        self.ui = []
         self.show_ls()
 
     def do_nothing(self):
         pass
 
     def check(self):
-        depth = 0
+        force = "force" in self.ui
+        depth = 1
         for i in self.ui:
             if isinstance(i,int): depth = i
 
         self.drive.check( self.pwd, 
-                new_only = "new" in self.ui, max_depth = depth)
+                new_only = "new" in self.ui, max_depth = depth, force = force)
 
     def change_dir(self):
-        next_dir = self.ui[1]
+        next_dir = "%s" % self.ui[1]
         if ".." in next_dir:
             if self.pwd.parent is None:
                 print("no parent")
@@ -306,7 +311,8 @@ class CLI():
 
 
     def show_ls(self, *args, **kargs):
-        print(self.pwd.ls_string(*args, **kargs))
+        force = "force" in self.ui
+        print(self.pwd.ls_string(force = force, *args, **kargs))
 
     def show_pwd(self):
         print("%s" % self.pwd.pwd_string())
@@ -318,6 +324,8 @@ class CLI():
         self.end = False
         while not self.end :
             self.ui = raw_input(self.prompt).split()
+
+            if not self.ui: continue
 
             # make ints out of int arguements
             for i,v in enumerate(self.ui):
