@@ -250,30 +250,31 @@ class Drive():
         return self.as_string()
 
     def check(self, directory, depth = 0, max_depth = 1, new_only=False, force = False, silent = False):
+        objects = [directory,]
+        object_pointer = 0
 
-        if self.check_interrupt or depth>=max_depth: return ([],[])
+        counters = [0] * (max_depth+1)
 
-        exists = []
-        new = []
-        ls = directory.ls(force = force)
+        while not self.check_interrupt and object_pointer < len(objects):
 
-        if ls is None: return ([],[])
+            pwd = objects[object_pointer]
+            #print(pwd)
+            object_pointer+=1
 
-        for f in ls:
-            (e,n) = self.check(f,depth = depth+1, max_depth = max_depth, silent = silent)
-            if f.folder and (not new_only or f.local) and not silent:
-                if e or n: summary = "(%s,%s)" % (len(e), len(n))
-                else: summary = "     "
-                print("%s %s %s%s" % 
-                        (" " if f.local else "N", summary, "\t"*depth, f.name))
-            exists.extend(e)
-            new.extend(n)
-            if f.local:
-               exists.append(f)
+            if pwd == directory:
+                pwd.check_depth = 0
             else:
-               new.append(f)
-           
-        return (exists, new)
+                pwd.check_depth = pwd.parent.check_depth + 1
+                counters[pwd.check_depth] += 1
+
+            ls = pwd.ls(force = force)
+            
+            if pwd.check_depth < max_depth and ls:
+                for f in ls:
+                    objects.append(f)
+
+        print("files found at depth: %s" % counters)
+
         
     def as_string(self, objects = None, tab=0, new_line=0, *args, **kargs):
         if objects is None:
@@ -326,14 +327,7 @@ class CLI():
 
             drive.check_ready = False
 
-            (exists,new) = drive.check( pwd, silent = True, max_depth = depth)
-
-            print(" found files in %s = %s, (exists: %s, new: %s) depth = %s" % (
-                pwd.name,
-                len(exists) + len(new),
-                len(exists), len(new), 
-                depth,
-                ))
+            drive.check( pwd, silent = True, max_depth = depth)
 
             drive.check_ready = True
 
