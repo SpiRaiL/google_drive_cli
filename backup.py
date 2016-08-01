@@ -188,7 +188,7 @@ class Drive():
             if page_token is None:
                 break;
             else:
-                print ("found: %s files" % len(self.file_list))
+                #print ("found: %s files" % len(self.file_list))
             if len(self.file_list) > result_limit:
                 print ("file limit reached")
                 break;
@@ -210,7 +210,7 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
-    def check(self, directory, depth = 0, max_depth = 1, new_only=False, force = False):
+    def check(self, directory, depth = 0, max_depth = 1, new_only=False, force = False, silent = False):
         exists = []
         new = []
         ls = directory.ls(force = force)
@@ -218,8 +218,8 @@ class Drive():
         if ls is None or depth>=max_depth: return ([],[])
 
         for f in ls:
-            (e,n) = self.check(f,depth = depth+1, max_depth = max_depth)
-            if f.folder and (not new_only or f.local):
+            (e,n) = self.check(f,depth = depth+1, max_depth = max_depth, silent = silent)
+            if f.folder and (not new_only or f.local) and not silent:
                 if e or n: summary = "(%s,%s)" % (len(e), len(n))
                 else: summary = "     "
                 print("%s %s %s%s" % 
@@ -268,12 +268,21 @@ class CLI():
 
     def check(self):
         force = "force" in self.ui
+        silent = ("silent" in self.ui) or ("quiet" in self.ui) or ("q" in self.ui)
         depth = 1
         for i in self.ui:
             if isinstance(i,int): depth = i
 
-        self.drive.check( self.pwd, 
-                new_only = "new" in self.ui, max_depth = depth, force = force)
+        print("checking for diffs, press control+c to cancel")
+
+        try:
+            self.drive.check( self.pwd, 
+                new_only = "new" in self.ui, 
+                max_depth = depth, force = force,
+                silent = silent
+                )
+        except KeyboardInterrupt: #detects control+c
+            pass
 
     def change_dir(self):
         next_dir = "%s" % self.ui[1]
