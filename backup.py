@@ -54,6 +54,7 @@ class File_object():
 
         self.trashed = json.get('trashed')
         self.parents= json.get('parents')
+        self.parent = None
 
         #self.check_local()
 
@@ -62,10 +63,18 @@ class File_object():
         self.local_path = "" 
 
     #ls wrapper so ls can be called on an oject and its children will be returned
-    def ls(self):
-        self.ls = self.drive.ls(self)
-        return self.ls
+    def ls(self,*args, **kargs):
+        return self.drive.ls(self,*args, **kargs)
 
+    def ls_string(self, *args, **kargs):
+        return self.drive.as_string(self.ls(),*args, **kargs)
+
+    def pwd_string(self):
+        return self.path + self.name
+
+    def __str__(self):
+        return self.as_string()
+        
     def as_string(self, details=False, json=False):
         string = ""
         if json: string += "%s\t " % self.json
@@ -74,8 +83,9 @@ class File_object():
         if details: string += "%s\t " % self.trashed
         if details: string += "%s\t " % self.parents
         if self.folder: string += "D " 
-        if self.local: string += "E "
-        string += "%s\t " % self.local_path
+        else: string += "\t" 
+        if not self.local: string += "N "
+        #string += "%s\t " % self.local_path
         string += "%s\t " % self.name
         return string
 
@@ -186,31 +196,115 @@ class Drive():
     def ls(self, obj):
         if obj.folder:
             results = self.search("'%s' in parents" % obj.id)
+            results.sort(key=lambda x: (not x.folder,x.name), reverse=False)
+            #results.sort(key=lambda x: (x.folder,x.name), reverse=False)
             for i in results:
                 i.set_parent(obj)
                 i.check_local()
             return results
         else:
-            return None
-        
+            return None 
 
-    @staticmethod
-    def as_string(objects, tab=0):
-        string = ""
+    def __str__(self):
+        return self.as_string()
+        
+    def as_string(self, objects = None, tab=0, new_line=0):
+        if objects is None:
+            objects = self.file_list
+
+        string = "%s" % "\n"*new_line #precedeing new lines
+
         for i in objects:
             string += "%s%s\n" % ("\t"*tab, i.as_string())
         return string
-    
+
+class CLI():
+    def __init__(self, drive):
+        self.options = {
+            'q': self.end_run,
+            'exit': self.end_run,
+            'pwd': self.show_pwd, 
+            'ls': self.show_ls, 
+            'cd': self.change_dir, 
+            '': self.do_nothing, 
+
+                }
+
+        self.prompt = " D > " 
+        self.drive = drive
+        self.pwd =  g.get_root() 
+        self.show_ls()
+
+    def do_nothing(self):
+        pass
+
+    def change_dir(self):
+        if ".." in self.next_dir:
+            if self.pwd.parent is None:
+                print("no parent")
+                return
+            print("changing to: %s" % self.pwd.name)
+            self.pwd = self.pwd.parent
+            self.show_ls(tab=1,new_line = 1)
+
+            return
+
+        #get the list
+        ls = self.pwd.ls()
+        
+        if ls is None:
+            print("failed to get dirs")
+            
+
+        for i in ls:
+            #print("checking: %s in %s" % ( self.next_dir.lower(), i.name.lower()))
+            if self.next_dir.lower() in i.name.lower():
+                print("changing to %s (matched %s)"  % (i.name,self.next_dir))
+                self.pwd = i
+
+                self.show_ls(tab=1,new_line = 1)
+                return
+
+        print("no dir matched")
+
+
+    def show_ls(self, *args, **kargs):
+        print(self.pwd.ls_string(*args, **kargs))
+
+    def show_pwd(self):
+        print("%s" % self.pwd.pwd_string())
+
+    def end_run(self):
+        self.end = True
+        
+    def run(self):
+        self.end = False
+        while not self.end :
+            ui = raw_input(self.prompt)
+
+            if len(ui)>2 and ui[:2] == 'cd':
+                self.next_dir = ui[3:]
+                ui = ui[:2]
+
+            try:
+                function = self.options[ui]
+            except:
+                print("command unknonw")
+                function = None
+
+            if function: function()
 
 if __name__ == '__main__':
     local = "gdrive_humans/"
     g = Drive(local = local)
-    root =  g.get_root() 
+    c = CLI(g)
+    c.show_pwd()
+    c.run()
 
-    result = root.ls()
-    print(Drive.as_string(result))
+    #result = root.ls()
+    #print(Drive.as_string(result))
 
-    for i in result:
-        print(i.as_string())
-        print(Drive.as_string(i.ls(),tab=1))
+    #for i in result:
+    #    print(i.as_string())
+    #    print(Drive.as_string(i.ls(),tab=1))
 
