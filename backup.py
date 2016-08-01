@@ -129,6 +129,11 @@ class Drive():
         self.check_interrupt = False
         self.check_ready = True
 
+
+    """ 
+        functions using the google drive API 
+    """
+
     def get_credentials(self):
         """Gets valid user credentials from storage.
     
@@ -158,21 +163,6 @@ class Drive():
         return credentials
 
 
-    #gets the root of the tree to be replicated
-    def get_root(self, name=None):
-        if name is None:
-            name = "00 GDRIVE_NEW"
-        results = self.search_name(name)
-        self.root = results[0]
-        return self.root
-
-    def search_name(self, name, contains= False, **kargs):
-        #resolve wild cards
-        if contains: contains = ' contains '
-        else: contains = "="
-
-        return self.search( "name%s'%s'" % (contains, name), **kargs)
-
     #search file by name
     def search(self, q_function, result_limit = 1000, contains= False, trash=False):
 
@@ -191,16 +181,59 @@ class Drive():
 
             page_token = response.get('nextPageToken', None)
             if page_token is None:
-                break;
+                break
             else:
                 pass
                 #print ("found: %s files" % len(self.file_list))
             if len(self.file_list) > result_limit:
                 print ("file limit reached")
-                break;
+                break
 
         #print ("files found: %s" % len(self.file_list))
         return self.file_list
+
+
+    """ 
+        api wrappers
+
+        these call the above fuctions and do not use the api directly
+    """
+    
+    """
+        wait for ready is used in threading. It stops multiple threaded callsed to the drive api
+    """
+    def wait_for_ready(self):
+
+        if self.check_ready: return
+
+        print("stoppping background check")
+        self.check_interrupt = True
+
+        counter = 0
+        while not self.check_ready:
+            counter += 1
+        if counter:
+            print('wait counter: %s' % counter)
+
+        self.check_interrupt = False
+        #self.check_ready = True # redundant
+
+
+    #gets the root of the tree to be replicated
+    def get_root(self, name=None):
+        if name is None:
+            name = "00 GDRIVE_NEW"
+        results = self.search_name(name)
+        self.root = results[0]
+        return self.root
+
+    def search_name(self, name, contains= False, **kargs):
+        #resolve wild cards
+        if contains: contains = ' contains '
+        else: contains = "="
+
+        return self.search( "name%s'%s'" % (contains, name), **kargs)
+
 
     def ls(self, obj, *args, **kargs):
         if obj.folder:
@@ -290,34 +323,26 @@ class CLI():
         #clear = "clear" in self.ui 
 
         def threadded_check(drive, pwd, depth):
+
+            drive.check_ready = False
+
             (exists,new) = drive.check( pwd, silent = True, max_depth = depth)
+
             print(" found files in %s = %s, (exists: %s, new: %s) depth = %s" % (
                 pwd.name,
                 len(exists) + len(new),
                 len(exists), len(new), 
                 depth,
                 ))
+
             drive.check_ready = True
 
-        if not self.drive.check_ready:
-            print("stoppping background check")
-            self.drive.check_interrupt = True
+
+        self.drive.wait_for_ready()
 
         if not stop:
-            counter = 0
-            while not self.drive.check_ready:
-                counter += 1
-
-            if counter:
-                print('wait counter: %s' % counter)
-
-            self.drive.check_interrupt = False
-
             print("starting background check")
-            self.drive.check_ready = False
             thread.start_new_thread(threadded_check, (self.drive, self.pwd, depth))
-
-            
 
 
     """
@@ -375,8 +400,11 @@ class CLI():
                 print("changing to %s (matched %s)"  % (i.name,next_dir))
                 self.pwd = i
 
-                self.background_check(depth = 4)
+                if self.pwd.children is None:
+                    self.background_check(stop=True)
+
                 self.show_ls(tab=1,new_line = 1)
+                self.background_check(depth = 4)
 
                 return
 
