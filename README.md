@@ -1,6 +1,7 @@
 # google_drive_cli
 
-python linux based cli for google drive
+python based cli for google drive. 
+Tested in debian linux and mac os
 
 
 #disclaimer

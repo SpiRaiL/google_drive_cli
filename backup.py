@@ -152,7 +152,7 @@ class Drive():
 
         self.check_interrupt = False
         self.check_ready = True
-
+        self.check_counters = []
 
     """ 
         functions using the google drive API 
@@ -277,12 +277,12 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
-    def check(self, directory, max_depth = 1, force = False, silent = False):
+    def check(self, directory, max_depth = 1, force = False, silent = True):
         self.check_ready = False
         objects = [directory,]
         object_pointer = 0
 
-        counters = [0] * (max_depth+1)
+        self.check_counters = [0] * (max_depth)
 
         while not self.check_interrupt and object_pointer < len(objects):
 
@@ -294,7 +294,7 @@ class Drive():
                 pwd.check_depth = 0
             else:
                 pwd.check_depth = pwd.parent.check_depth + 1
-                counters[pwd.check_depth] += 1
+                self.check_counters[pwd.check_depth-1] += 1
 
             ls = pwd.ls(force = force)
             
@@ -303,9 +303,22 @@ class Drive():
                     objects.append(f)
 
         if not silent:
-            print("files found at depth: %s" % counters)
+            print("files found at depth: %s" % self.check_counters)
 
         self.check_ready = True
+
+    def as_string(self):
+        string = "\n" 
+
+        if self.check_ready:    string+="file check complete\n"
+        else:                   string+="checking for files\n"
+
+        if self.check_counters:
+            for i,c in enumerate(self.check_counters):
+                if c == 0: break
+                string += "\t%s files found at depth %s\n" % (c,i)
+        return string
+        
         
 class CLI():
     def __init__(self, drive):
@@ -330,7 +343,7 @@ class CLI():
         self.background_check()
 
     def report(self):
-        pass
+        print(self.drive.as_string())
 
     def do_nothing(self):
         pass
@@ -352,7 +365,7 @@ class CLI():
 
         def threadded_check(drive, pwd, depth):
             try:
-                drive.check( pwd, silent = False, max_depth = depth)
+                drive.check( pwd, max_depth = depth)
             except KeyboardInterrupt: #abort with contorl C
                 pass
 
@@ -374,7 +387,6 @@ class CLI():
             self.pwd = self.pwd.parent
             print("changing to: %s" % self.pwd.name)
             self.show_ls(tab=1,new_line = 1)
-
             return
 
         if "/" in next_dir:
