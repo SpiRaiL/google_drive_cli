@@ -32,6 +32,7 @@ except ImportError:
 SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly'
 CLIENT_SECRET_FILE = 'drive_backup/client_id.json'
 APPLICATION_NAME = 'Drive API Python Quickstart'
+LOCAL_BACKUP_DIRECTORY = "gdrive_humans/"
 
 """
     an object for a particular file or folder in google drive
@@ -430,8 +431,7 @@ class CLI():
             if function: function()
 
 if __name__ == '__main__':
-    local = "gdrive_humans/"
-    g = Drive(local = local)
+    g = Drive(local = LOCAL_BACKUP_DIRECTORY)
     c = CLI(g)
     c.show_pwd()
     c.run()
