@@ -72,7 +72,9 @@ class File_object():
         return self.children
 
     def ls_string(self, *args, **kargs):
-        return self.drive.as_string(self.ls(*args, **kargs))
+        ls = self.ls(*args, **kargs)
+        if not ls: return "Folder is empty"
+        return self.drive.as_string(ls)
 
     def pwd_string(self):
         return self.path + self.name
@@ -169,11 +171,13 @@ class Drive():
         page_token = None
         self.file_list = []
         while True: #has to loop through pages to get all the results
-            response = self.service.files().list(
+            result_list = self.service.files().list(
                 q=q_function,
                 spaces='drive',
                 fields='nextPageToken, files(id, name, mimeType, trashed, parents)',
-                pageToken=page_token).execute()
+                pageToken=page_token)
+            #print("result list: %s" % result_list)
+            response = result_list.execute()
             for file in response.get('files', []):
                 f = File_object(self,file)
                 if trash or not f.trashed:
@@ -331,7 +335,10 @@ class CLI():
         if "auto_on" in self.ui: self.auto_check = True
 
         def threadded_check(drive, pwd, depth):
-            drive.check( pwd, silent = False, max_depth = depth)
+            try:
+                drive.check( pwd, silent = False, max_depth = depth)
+            except KeyboardInterrupt: #abort with contorl C
+                pass
 
         self.drive.wait_for_ready()
 
@@ -387,6 +394,7 @@ class CLI():
 
     def show_ls(self, *args, **kargs):
         force = "force" in self.ui
+        self.background_check(stop=True)
         print(self.pwd.ls_string(force = force, *args, **kargs))
 
     def show_pwd(self):
