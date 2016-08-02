@@ -30,9 +30,9 @@ except ImportError:
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/drive-python-quickstart.json
 SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly'
-CLIENT_SECRET_FILE = 'drive_backup/client_id.json'
+CLIENT_SECRET_FILE = 'client_id.json'
 APPLICATION_NAME = 'Drive API Python Quickstart'
-LOCAL_BACKUP_DIRECTORY = "gdrive_humans/"
+LOCAL_BACKUP_DIRECTORY = "../gdrive/"
 
 """
     an object for a particular file or folder in google drive
