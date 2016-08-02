@@ -77,7 +77,11 @@ class File_object():
     def ls_string(self, *args, **kargs):
         ls = self.ls(*args, **kargs)
         if not ls: return "Folder is empty"
-        return self.drive.as_string(ls)
+        string = ""
+        for i in ls:
+            string += "%s\n" % (i.as_string(*args,**kargs))
+
+        return string
 
     def pwd_string(self):
         return self.path + self.name
@@ -85,7 +89,7 @@ class File_object():
     def __str__(self):
         return self.as_string()
         
-    def as_string(self, details=False, json=False):
+    def as_string(self, tab = 0, details=False, json=False, *args, **kargs):
         string = ""
         if json: string += "%s\t " % self.json
         if details: string += "%s\t " % self.id
@@ -95,8 +99,10 @@ class File_object():
         if self.folder: string += "D " 
         else: string += "\t" 
         if not self.check_local(): string += "N "
+        string += "\t"*tab
         string += "%s\t " % self.name
-        string += "%s\t " % self.local_path
+
+        #string += "%s\t " % self.local_path
         return string
 
     # sets the parent oject that caled LS to this object in order to build up a folder structure
@@ -245,7 +251,6 @@ class Drive():
 
     #gets the root of the tree to be replicated
     def get_root(self, name=None):
-        if name is None:
         results = self.search_name(DRIVE_ROOT_DIR)
         self.root = results[0]
         return self.root
@@ -301,18 +306,7 @@ class Drive():
             print("files found at depth: %s" % counters)
 
         self.check_ready = True
-
         
-    def as_string(self, objects = None, tab=0, new_line=0, *args, **kargs):
-        if objects is None:
-            objects = self.file_list
-
-        string = "%s" % "\n"*new_line #precedeing new lines
-
-        for i in objects:
-            string += "%s%s\n" % ("\t"*tab, i.as_string())
-        return string
-
 class CLI():
     def __init__(self, drive):
         self.options = {
@@ -414,10 +408,10 @@ class CLI():
         print("no dir matched")
 
 
-    def show_ls(self, *args, **kargs):
+    def show_ls(self, tab=1, *args, **kargs):
         force = "force" in self.ui
         self.background_check(stop=True)
-        print(self.pwd.ls_string(force = force, *args, **kargs))
+        print(self.pwd.ls_string(force = force, tab = tab, *args, **kargs))
 
     def show_pwd(self):
         print("%s" % self.pwd.pwd_string())
@@ -454,13 +448,5 @@ class CLI():
 if __name__ == '__main__':
     g = Drive(local = LOCAL_BACKUP_DIRECTORY)
     c = CLI(g)
-    c.show_pwd()
+#    c.show_pwd()
     c.run()
-
-    #result = root.ls()
-    #print(Drive.as_string(result))
-
-    #for i in result:
-    #    print(i.as_string())
-    #    print(Drive.as_string(i.ls(),tab=1))
-
