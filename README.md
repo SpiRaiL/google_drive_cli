@@ -17,7 +17,11 @@ If you want to contribute let me know. Im tailoring it to suit my specific needs
 
 1. follow this tutorial: https://developers.google.com/drive/v3/web/quickstart/python
 2. fill out the start of the file for your local directory the same as you did in the tutorial
-3. python backup.py
+3. install requirements:
+
+   pip install --upgrade google-api-python-client
+
+4. python backup.py
 
 # current features. 
 

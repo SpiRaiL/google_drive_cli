@@ -33,6 +33,7 @@ SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly'
 CLIENT_SECRET_FILE = 'client_id.json'
 APPLICATION_NAME = 'Drive API Python Quickstart'
 LOCAL_BACKUP_DIRECTORY = "../gdrive/"
+DRIVE_ROOT_DIR = "00 GDRIVE_NEW" #the drive directory we will synconsize
 
 """
     an object for a particular file or folder in google drive
@@ -64,6 +65,7 @@ class File_object():
 
         #resolved path in the file tree
         self.path = "" 
+        self.local_dir = "" 
         self.local_path = "" 
 
     #ls wrapper so ls can be called on an oject and its children will be returned
@@ -92,26 +94,39 @@ class File_object():
         if details: string += "%s\t " % self.parents
         if self.folder: string += "D " 
         else: string += "\t" 
-        if not self.local: string += "N "
-        #string += "%s\t " % self.local_path
+        if not self.check_local(): string += "N "
         string += "%s\t " % self.name
+        string += "%s\t " % self.local_path
         return string
 
     # sets the parent oject that caled LS to this object in order to build up a folder structure
     def set_parent(self, parent):
         self.parent = parent
         self.path += parent.path + parent.name + "/"
-        self.local_path = "%s%s" % (self.local.root,self.path)
+        self.local_dir, self.local_path  = self.local.get_path(self)
 
     # check if the local file exists
     def check_local(self):
-        #if not self.path: return False
-        self.local = (self.path and os.path.exists(self.local_path))
-        return self.local
+        return self.local.exists(self)
 
+"""
+    to be extended. The class that sepecifies what happens on the local side
+"""
 class Local():
     def __init__(self, root):
         self.root = root
+
+    #get the local path of a file or dir object
+    def get_path(self, obj):
+        directory = "%s%s" % (self.root,obj.path)
+        path = "%s%s" % (directory,obj.name)
+        return (directory, path)
+
+    #returns true if the local path exists
+    def exists(self, obj):
+        d,p = self.get_path(obj)
+        return (obj.path and os.path.exists(p))
+
 
 """
     the connection and commands to google drive
@@ -138,6 +153,10 @@ class Drive():
     """
 
     def get_credentials(self):
+
+        if not os.path.exists(CLIENT_SECRET_FILE):
+            print("the credentials file is missing. follow the tutorial in the readme so you know what to do")
+            exit()
         """Gets valid user credentials from storage.
     
         If nothing has been stored, or if the stored credentials are invalid,
@@ -227,8 +246,7 @@ class Drive():
     #gets the root of the tree to be replicated
     def get_root(self, name=None):
         if name is None:
-            name = "00 GDRIVE_NEW"
-        results = self.search_name(name)
+        results = self.search_name(DRIVE_ROOT_DIR)
         self.root = results[0]
         return self.root
 
@@ -305,7 +323,7 @@ class CLI():
             'ls': self.show_ls, 
             'cd': self.change_dir, 
             'check': self.background_check,
-
+            'report': self.report,
                 }
 
         self.auto_check = True
@@ -316,6 +334,9 @@ class CLI():
         self.ui = []
         self.show_ls()
         self.background_check()
+
+    def report(self):
+        pass
 
     def do_nothing(self):
         pass
