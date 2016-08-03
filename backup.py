@@ -277,12 +277,23 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
-    def check(self, directory, max_depth = 1, force = False, silent = True):
+    def check(self, directory, max_depth = None, force = False, silent = True):
         self.check_ready = False
         objects = [directory,]
         object_pointer = 0
 
-        self.check_counters = [0] * (max_depth)
+        #quick object for counting files
+        class counter():
+            def __init__(self, depth):
+                self.depth = depth
+                self.folders = 0
+                self.new_folders = 0
+                self.new = 0
+                self.files = 0
+                self.same = 0 #TODO report changed files
+                self.different = 0
+
+        self.check_counters = [ counter(0) ]
 
         while not self.check_interrupt and object_pointer < len(objects):
 
@@ -294,11 +305,30 @@ class Drive():
                 pwd.check_depth = 0
             else:
                 pwd.check_depth = pwd.parent.check_depth + 1
-                self.check_counters[pwd.check_depth-1] += 1
+
+            if max_depth and pwd.check_depth > max_depth: break
+                
+            #check and increase list sizes
+            if len(self.check_counters) < pwd.check_depth:
+                self.check_counters.append(counter(depth = pwd.check_depth)) 
+
+            if pwd.folder:
+                self.check_counters[pwd.check_depth-1].folders += 1
+                if not pwd.check_local():
+                    self.check_counters[pwd.check_depth-1].new_folders += 1
+
+            else:
+                self.check_counters[pwd.check_depth-1].files += 1
+                if pwd.check_local():
+                    self.check_counters[pwd.check_depth-1].same += 1
+                else:
+                    #self.check_counters[pwd.check_depth-1].different += 1
+                    self.check_counters[pwd.check_depth-1].new += 1
 
             ls = pwd.ls(force = force)
+
             
-            if pwd.check_depth < max_depth and ls:
+            if ls:
                 for f in ls:
                     objects.append(f)
 
@@ -315,8 +345,8 @@ class Drive():
 
         if self.check_counters:
             for i,c in enumerate(self.check_counters):
-                if c == 0: break
-                string += "\t%s files found at depth %s\n" % (c,i)
+                string += "depth %s: \t%s folders (%s new) \t %s files (%s exists, %s new)\n" % (
+                        i, c.folders, c.new_folders, c.files, c.same, c.new)
         return string
         
         
@@ -328,7 +358,7 @@ class CLI():
             'exit': self.end_run,
             'pwd': self.show_pwd, 
             'ls': self.show_ls, 
-            'cd': self.change_dir, 
+            'cd': self.change_dir_and_check, 
             'check': self.background_check,
             'report': self.report,
                 }
@@ -353,7 +383,6 @@ class CLI():
     """
     def background_check(self, stop = None, depth = None, force = None):
         if depth is None:
-            depth = 4
             for i in self.ui:
                 if isinstance(i,int): depth = i
 
@@ -376,28 +405,35 @@ class CLI():
             thread.start_new_thread(threadded_check, (self.drive, self.pwd, depth))
 
 
+    def change_dir_and_check(self):
+        if self.change_dir():
+            self.background_check()
+
     def change_dir(self):
-        if len(self.ui) < 2: return
+        if len(self.ui) < 2: return False
         else: next_dir = "%s" % self.ui[1]
 
         if ".." in next_dir:
             if self.pwd.parent is None:
                 print("no parent")
-                return
+                return False
+
             self.pwd = self.pwd.parent
             print("changing to: %s" % self.pwd.name)
             self.show_ls(tab=1,new_line = 1)
-            return
+            return True
 
         if "/" in next_dir:
             self.pwd = self.root
             print("changing to: %s" % self.pwd.name)
             self.show_ls(tab=1,new_line = 1)
-            return
+            return True
 
         #get the list
+        check_stop = False
         if self.pwd.children is None:
             self.background_check(stop=True)
+            check_stop = True #track that the check was stopped and needs to be resumed
 
         ls = self.pwd.ls()
         
@@ -413,11 +449,11 @@ class CLI():
                     self.background_check(stop=True)
 
                 self.show_ls(tab=1,new_line = 1)
-                self.background_check(depth = 4)
 
-                return
+                return True
 
         print("no dir matched")
+        return check_stop 
 
 
     def show_ls(self, tab=1, *args, **kargs):
@@ -435,7 +471,6 @@ class CLI():
         self.end = False
         while not self.end :
             self.ui = raw_input(self.prompt).split()
-            #self.background_check(stop=True)
 
             if not self.ui: continue
 
