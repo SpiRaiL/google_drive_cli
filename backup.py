@@ -12,11 +12,11 @@
 
 from __future__ import print_function
 import httplib2
-import os
+import os, io
 import thread
 
 
-from apiclient import discovery
+from apiclient import discovery, http
 import oauth2client
 from oauth2client import client
 from oauth2client import tools
@@ -116,12 +116,16 @@ class File_object():
         return self.local.exists(self)
 
     #pull the file down from the server and replace the current one
-    def pull(self):
+    def sync(self):
         if self.folder:
+            print("adding folder: %s" % self)
             self.local.mkdir(self)
         else:
-            #TODO
-            pass
+            print("syncing file: %s" % self)
+            if not self.check_local():
+                #self.drive.download(self.id)
+                self.drive.export(self.id, self.mimeType)
+
 
 """
     to be extended. The class that sepecifies what happens on the local side
@@ -138,6 +142,8 @@ class Local():
 
     #returns true if the local path exists
     def exists(self, obj):
+        if "/" in obj.name:
+            print("warning: some 'person' has put a forward slash in a name!\t dir: %s file: %s" % (obj.path, obj.name))
         d,p = self.get_path(obj)
         return (obj.path and os.path.exists(p))
 
@@ -168,6 +174,7 @@ class Drive():
         self.check_counters = []
 
         self.sync_queue = []
+        self.check_prioity_depth = 1 #the depth to check for files before procuessing the sync queue
 
     """ 
         functions using the google drive API 
@@ -237,6 +244,24 @@ class Drive():
         #print ("files found: %s" % len(self.file_list))
         return self.file_list
 
+    def download(self, file_id):
+	request = self.service.files().get_media(fileId=file_id)
+	fh = io.BytesIO()
+	downloader = http.MediaIoBaseDownload(fh, request)
+	done = False
+	while done is False:
+    		status, done = downloader.next_chunk()
+    		print("Download %d%%." % int(status.progress() * 100))
+
+    def export(self, file_id, mimeType):
+        request = self.service.files().export_media(fileId=file_id, mimeType=mimeType)
+        fh = io.BytesIO()
+        downloader = http.MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            print("Download %d%%." % int(status.progress() * 100))
+
 
     """ 
         api wrappers
@@ -292,6 +317,11 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
+    def process_sync_queue(self):
+        while not self.check_interrupt and self.sync_queue:
+            pwd = self.sync_queue.pop(0)
+            pwd.sync()
+
     def check(self, directory, depth = None, force = False, silent = True, pull=False, dirs_only=False):
         self.check_ready = False
         objects = [directory,]
@@ -314,7 +344,6 @@ class Drive():
 
             pwd = objects[object_pointer]
             #print(pwd)
-            object_pointer+=1
 
             if pwd == directory:
                 pwd.check_depth = 0
@@ -322,6 +351,9 @@ class Drive():
                 pwd.check_depth = pwd.parent.check_depth + 1
 
             if depth and pwd.check_depth > depth: break
+
+            if pwd.check_depth > self.check_prioity_depth and self.sync_queue:
+                self.process_sync_queue()
                 
             #check and increase list sizes
             if len(self.check_counters) < pwd.check_depth:
@@ -332,7 +364,7 @@ class Drive():
                 if not pwd.check_local():
                     self.check_counters[pwd.check_depth-1].new_folders += 1
                     if pull:
-                        pwd.pull()
+                        self.sync_queue.append(pwd)
 
             else:
                 self.check_counters[pwd.check_depth-1].files += 1
@@ -351,8 +383,13 @@ class Drive():
                 for f in ls:
                     objects.append(f)
 
+            object_pointer+=1
+
         if not silent:
             print("files found at depth: %s" % self.check_counters)
+
+        #needs to be here as well so it is processed if ALL checks have been made
+        self.process_sync_queue()
 
         self.check_ready = True
 
@@ -382,7 +419,7 @@ class CLI():
             'cd': self.change_dir_and_check, 
             'check': self.background_check,
             'report': self.report,
-            'pull': self.background_pull,
+            #'pull': self.background_pull,
                 }
 
         self.auto_check = True
