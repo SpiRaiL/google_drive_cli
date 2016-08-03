@@ -115,6 +115,14 @@ class File_object():
     def check_local(self):
         return self.local.exists(self)
 
+    #pull the file down from the server and replace the current one
+    def pull(self):
+        if self.folder:
+            self.local.mkdir(self)
+        else:
+            #TODO
+            pass
+
 """
     to be extended. The class that sepecifies what happens on the local side
 """
@@ -132,6 +140,11 @@ class Local():
     def exists(self, obj):
         d,p = self.get_path(obj)
         return (obj.path and os.path.exists(p))
+
+    def mkdir(self, obj):
+        d,p = self.get_path(obj)
+        if obj.path: 
+            os.mkdir(p)
 
 
 """
@@ -153,6 +166,8 @@ class Drive():
         self.check_interrupt = False
         self.check_ready = True
         self.check_counters = []
+
+        self.sync_queue = []
 
     """ 
         functions using the google drive API 
@@ -277,7 +292,7 @@ class Drive():
     def __str__(self):
         return self.as_string()
 
-    def check(self, directory, max_depth = None, force = False, silent = True):
+    def check(self, directory, depth = None, force = False, silent = True, pull=False, dirs_only=False):
         self.check_ready = False
         objects = [directory,]
         object_pointer = 0
@@ -306,7 +321,7 @@ class Drive():
             else:
                 pwd.check_depth = pwd.parent.check_depth + 1
 
-            if max_depth and pwd.check_depth > max_depth: break
+            if depth and pwd.check_depth > depth: break
                 
             #check and increase list sizes
             if len(self.check_counters) < pwd.check_depth:
@@ -316,6 +331,8 @@ class Drive():
                 self.check_counters[pwd.check_depth-1].folders += 1
                 if not pwd.check_local():
                     self.check_counters[pwd.check_depth-1].new_folders += 1
+                    if pull:
+                        pwd.pull()
 
             else:
                 self.check_counters[pwd.check_depth-1].files += 1
@@ -324,6 +341,8 @@ class Drive():
                 else:
                     #self.check_counters[pwd.check_depth-1].different += 1
                     self.check_counters[pwd.check_depth-1].new += 1
+                    if pull and not dirs_only:
+                        self.sync_queue.append(pwd)
 
             ls = pwd.ls(force = force)
 
@@ -339,6 +358,8 @@ class Drive():
 
     def as_string(self):
         string = "\n" 
+
+        string += "Syncronisation queue has %s tasks left\n" % len(self.sync_queue)
 
         if self.check_ready:    string+="file check complete\n"
         else:                   string+="checking for files\n"
@@ -361,6 +382,7 @@ class CLI():
             'cd': self.change_dir_and_check, 
             'check': self.background_check,
             'report': self.report,
+            'pull': self.background_pull,
                 }
 
         self.auto_check = True
@@ -370,7 +392,7 @@ class CLI():
         self.pwd =  self.root
         self.ui = []
         self.show_ls()
-        self.background_check()
+        #self.background_check()
 
     def report(self):
         print(self.drive.as_string())
@@ -378,10 +400,15 @@ class CLI():
     def do_nothing(self):
         pass
 
+    def background_pull(self):
+        dirs = ("dirs" in self.ui) or ("directories" in self.ui)
+        after = "after" in self.ui 
+        self.background_check(pull=True, dirs_only = dirs, )
+
     """
         runs check on the drive as a seperate thread that that builds up the file structure in the back ground
     """
-    def background_check(self, stop = None, depth = None, force = None):
+    def background_check(self, stop = None, depth = None, force = None, pull=False, dirs_only=False):
         if depth is None:
             for i in self.ui:
                 if isinstance(i,int): depth = i
@@ -392,9 +419,9 @@ class CLI():
         if "auto_off" in self.ui: self.auto_check = False
         if "auto_on" in self.ui: self.auto_check = True
 
-        def threadded_check(drive, pwd, depth):
+        def threadded_check():
             try:
-                drive.check( pwd, max_depth = depth)
+                self.drive.check( self.pwd, depth = depth, pull=pull,dirs_only=dirs_only)
             except KeyboardInterrupt: #abort with contorl C
                 pass
 
@@ -402,7 +429,7 @@ class CLI():
 
         if not stop and self.auto_check:
             print("starting background check")
-            thread.start_new_thread(threadded_check, (self.drive, self.pwd, depth))
+            thread.start_new_thread(threadded_check, ())
 
 
     def change_dir_and_check(self):

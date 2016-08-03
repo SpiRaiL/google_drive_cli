@@ -30,7 +30,9 @@ If you want to contribute let me know. Im tailoring it to suit my specific needs
 2. basic cli commands cd, ls and exit
 3. tells you i a file does not exist locally (flagged with an N) (not if its newer/older/different)
 4. caches file informtion for faster navigation
-5. used threads to pre-load 4 directorys deep in the background while browsing, so you can quickly navigate. 
+5. checks for new files and folders from a top-down tree perspective 
+    (ie: does not decend all the way down the first directory, then check from the bottom up)
+6. used threads to pre-load folder and file information in the background while browsing, so you can quickly navigate. 
 
 #coming soon. 
 
