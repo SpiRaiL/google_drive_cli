@@ -135,6 +135,7 @@ class Drive():
 
 	    self.done = True
             self.part = 0
+	    self.status = None
 
         def start(self, file_handle = None, first_process = True):
             if file_handle is None: 
@@ -148,7 +149,7 @@ class Drive():
 
             self.part = 0
 
-            print("starting download")
+            #print("starting download")
             if first_process: self.process()
 
         #needs to be called on a while loop in order to pull big files
@@ -156,6 +157,8 @@ class Drive():
             self.part += 1
     	    self.status, self.done = self.downloader.next_chunk()
     	    #print("Download %d%%. (part %s)" % (int(self.status.progress() * 100), self.part))
+            if self.done:
+                self.file_handle.close()
 
     def download(self, *args, **kargs):
         return self.downloader(self.service, *args, **kargs)
@@ -217,8 +220,21 @@ class Drive():
 
     def process_sync_queue(self):
         while not self.check_interrupt and self.sync_queue:
-            self.syncing = self.sync_queue.pop(0)
-            self.syncing.sync()
+            if self.syncing and self.syncing.downloader: 
+                if not self.syncing.downloader.done:
+                    self.syncing.downloader.process()
+                else:
+                    self.syncing.complete_pull()
+                    self.sync_queue.pop(0)
+                    self.syncing = None
+            else:
+                self.syncing = self.sync_queue[0]
+                self.syncing.sync()
+
+                #drop if its a folder
+                if self.syncing.folder: 
+                    self.sync_queue.pop(0)
+                    self.syncing = None
 
     def check(self, directory, depth = None, force = False, silent = True, pull=False, dirs_only=False):
         self.check_ready = False
@@ -296,12 +312,11 @@ class Drive():
     def as_string(self):
         string = "\n" 
 
-        if self.syncing:
-            string += "Sycning %s / %s \n" % (self.syncing.dir,self.syncing.name)
+        if self.syncing and self.syncing.downloader and self.syncing.downloader.status:
+            string += "Sycning file %s%s \n" % (self.syncing.dir,self.syncing.name)
             string += "progress: %s%%,  part: %s \n" % (
                     self.syncing.downloader.status.progress() * 100,
                     self.syncing.downloader.part)
-    	    #print("Download %d%%. (part %s)" % (int(self.status.progress() * 100), self.part))
 
         string += "Syncronisation queue has %s tasks left\n" % len(self.sync_queue)
 

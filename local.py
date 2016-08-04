@@ -19,9 +19,6 @@ class Local():
 
     #returns true if the local path exists
     def exists(self, obj):
-        #if "/" in obj.name:
-        #    print("warning: some 'person' has put a forward slash in a name!\t dir: %s file: %s" % (obj.path, obj.name))
-        #    return True #TODO we need to handle this becuse right now it cannot be downloaded
         d,p = self.get_path(obj)
         return (obj.path and os.path.exists(p))
 
@@ -32,4 +29,8 @@ class Local():
 
     def create_file(self, obj):
         d,p = self.get_path(obj)
-        return open(p + '.incomplete_download','w') #TODO interuptable return open(p + '.download','w')
+        return open(p + '.incomplete_download','w') 
+
+    def complete_file(self, obj):
+        d,p = self.get_path(obj)
+        os.rename(p + '.incomplete_download', p)

@@ -146,10 +146,10 @@ class File_object():
 
     def do_pull(self):
         if self.folder:
-            print("adding folder: %s" % self)
+            #print("adding folder: %s" % self)
             self.local.mkdir(self)
         else:
-            print("syncing file: %s" % self.as_string(details = True))
+            #print("syncing file: %s" % self.as_string(details = True))
             if self.downloader is None:
                 #determine if its a raw download or an export
                 if self.mimeType in direct_mime_types: export_type = None
@@ -165,9 +165,11 @@ class File_object():
             self.downloader.start(self.file_handle)
 
             #continue with / resume interupped download
-            while not self.downloader.done: self.downloader.process()
+            #while not self.downloader.done: self.downloader.process()
+            #self.file_handle.close()
 
-            self.file_handle.close()
+    def complete_pull(self):
+        self.local.complete_file(self)
 
 
 
