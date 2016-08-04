@@ -72,12 +72,13 @@ class File_object():
         self.parent = None
         self.children = None
 
-        #self.check_local()
-
         #resolved path in the file tree
         self.path = "" 
         self.local_dir = "" 
         self.local_path = "" 
+
+        self.pull = False
+        self.push = False
 
     #ls wrapper so ls can be called on an oject and its children will be returned
     def ls(self, force = False, *args, **kargs):
@@ -128,6 +129,10 @@ class File_object():
 
     #pull the file down from the server and replace the current one
     def sync(self):
+        if self.pull: self.do_pull()
+        elif self.push: self.do_push()
+
+    def do_pull(self):
         if self.folder:
             print("adding folder: %s" % self)
             self.local.mkdir(self)
@@ -137,9 +142,11 @@ class File_object():
                 #self.drive.download(self.id)
                 self.drive.export(self.id, self.mimeType)
 
+    def do_push(self):
+        #TODO
 
 """
-    to be extended. The class that sepecifies what happens on the local side
+    The class that sepecifies what happens on the local side
 """
 class Local():
     def __init__(self, root):
@@ -265,7 +272,8 @@ class Drive():
     		print("Download %d%%." % int(status.progress() * 100))
 
     def export(self, file_id, mimeType):
-        request = self.service.files().export_media(fileId=file_id, mimeType=mimeType)
+        #request = self.service.files().export_media(fileId=file_id, mimeType=mimeType)
+        request = self.service.files().export_media(fileId=file_id, mimeType='application/pdf')
         fh = io.BytesIO()
         downloader = http.MediaIoBaseDownload(fh, request)
         done = False
@@ -427,7 +435,8 @@ class CLI():
             'exit': self.end_run,
             'pwd': self.show_pwd, 
             'ls': self.show_ls, 
-            'cd': self.change_dir_and_check, 
+            'cd': self.change_dir, 
+            'details': self.details, 
             'check': self.background_check,
             'report': self.report,
             'pull': self.background_pull,
@@ -484,56 +493,51 @@ class CLI():
             print("starting background check")
             thread.start_new_thread(threadded_check, ())
 
-
-    def change_dir_and_check(self):
-        if self.change_dir():
-            self.background_check()
+    def details(self):
+        self.background_check(stop=True)
+        f = self.select_file()
+        if f: print(f.as_string(details = True))
+        self.background_check()
 
     def change_dir(self):
-        if len(self.ui) < 2: return False
+        self.background_check(stop=True)
+
+        new_dir =  self.select_file() 
+        if new_dir is not None: 
+            self.pwd = new_dir
+            print("changing to: %s" % self.pwd)
+            self.show_ls(tab=1,new_line = 1)
+        else:
+            print("no dir matched")
+
+        self.background_check()
+
+    def select_file(self):
+
+        if len(self.ui) < 2: return None
         else: next_dir = "%s" % self.ui[1]
 
+        if "/" in next_dir: return self.root
+
         if ".." in next_dir:
-            if self.pwd.parent is None:
-                print("no parent")
-                return False
+            if self.pwd.parent is None: print("no parent")
+            return self.pwd.parent
 
-            self.pwd = self.pwd.parent
-            print("changing to: %s" % self.pwd.name)
-            self.show_ls(tab=1,new_line = 1)
-            return True
-
-        if "/" in next_dir:
-            self.pwd = self.root
-            print("changing to: %s" % self.pwd.name)
-            self.show_ls(tab=1,new_line = 1)
-            return True
-
-        #get the list
-        check_stop = False
-        if self.pwd.children is None:
-            self.background_check(stop=True)
-            check_stop = True #track that the check was stopped and needs to be resumed
+        if next_dir[0] == '.':
+            return self.pwd
 
         ls = self.pwd.ls()
         
-        if ls is None:
-            print("failed to get dirs")
+        if ls is None: 
+            print("No sub files or folders")
+            return None
 
         for i in ls:
             if next_dir.lower() in i.name.lower():
-                print("changing to %s (matched %s)"  % (i.name,next_dir))
-                self.pwd = i
+                #print("found %s (matched %s)"  % (i.name,next_dir))
+                return i
 
-                if self.pwd.children is None:
-                    self.background_check(stop=True)
-
-                self.show_ls(tab=1,new_line = 1)
-
-                return True
-
-        print("no dir matched")
-        return check_stop 
+        return None
 
 
     def show_ls(self, tab=1, *args, **kargs):
