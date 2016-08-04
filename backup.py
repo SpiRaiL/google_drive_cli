@@ -14,7 +14,8 @@ from __future__ import print_function
 import httplib2
 import os, io
 import thread
-
+import traceback
+import sys
 
 from apiclient import discovery, http
 import oauth2client
@@ -28,10 +29,20 @@ except ImportError:
     flags = None
 
 # If modifying these scopes, delete your previously saved credentials
-# at ~/.credentials/drive-python-quickstart.json
-SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly'
+# rm ~/.credentials/drive-python-quickstart.json
+
+SCOPES = 'https://www.googleapis.com/auth/drive'                    #Full, permissive scope to access all of a user's files. Request this scope only when it is strictly necessary.
+#SCOPES = 'https://www.googleapis.com/auth/drive.readonly'           #Allows read-only access to file metadata and file content
+#SCOPES = 'https://www.googleapis.com/auth/drive.appfolder'          #Allows access to the Application Data folder
+#SCOPES = 'https://www.googleapis.com/auth/drive.file'               #Per-file access to files created or opened by the app
+#SCOPES = 'https://www.googleapis.com/auth/drive.install'            #Special scope used to let users approve installation of an app.
+#SCOPES = 'https://www.googleapis.com/auth/drive.metadata'           #Allows read-write access to file metadata, but does not allow any access to read, download, write or upload file content. Does not support file creation, trashing or deletion. Also does not allow changing folders or sharing in order to prevent access escalation.
+#SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly'  #Allows read-only access to file metadata, but does not allow any access to read or download file content
+#SCOPES = 'https://www.googleapis.com/auth/drive.photos.readonly'    #Allows read-only access to all photos. The spaces parameter must be set to photos.
+#SCOPES = 'https://www.googleapis.com/auth/drive.scripts'            #Allows access to Apps Script files
+
 CLIENT_SECRET_FILE = 'client_id.json'
-APPLICATION_NAME = 'Drive API Python Quickstart'
+APPLICATION_NAME = 'Drive cli backup using API Python'
 LOCAL_BACKUP_DIRECTORY = "../gdrive/"
 DRIVE_ROOT_DIR = "00 GDRIVE_NEW" #the drive directory we will synconsize
 
@@ -419,7 +430,7 @@ class CLI():
             'cd': self.change_dir_and_check, 
             'check': self.background_check,
             'report': self.report,
-            #'pull': self.background_pull,
+            'pull': self.background_pull,
                 }
 
         self.auto_check = True
@@ -461,6 +472,11 @@ class CLI():
                 self.drive.check( self.pwd, depth = depth, pull=pull,dirs_only=dirs_only)
             except KeyboardInterrupt: #abort with contorl C
                 pass
+            except Exception, err:
+                exc_info = sys.exc_info()
+                traceback.print_exception(*exc_info)
+
+            self.drive.check_ready = True
 
         self.drive.wait_for_ready()
 
