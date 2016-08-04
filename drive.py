@@ -30,7 +30,7 @@ SCOPES = 'https://www.googleapis.com/auth/drive'                    #Full, permi
 
 CLIENT_SECRET_FILE = 'client_id.json'
 APPLICATION_NAME = 'Drive cli backup using API Python'
-LOCAL_BACKUP_DIRECTORY = "../gdrive/"
+LOCAL_BACKUP_DIRECTORY = "../gdrive"
 DRIVE_ROOT_DIR = "00 GDRIVE_NEW" #the drive directory we will synconsize
 
 """
@@ -124,24 +124,54 @@ class Drive():
         #print ("files found: %s" % len(self.file_list))
         return self.file_list
 
-    def download(self, file_id):
-	request = self.service.files().get_media(fileId=file_id)
-	fh = io.BytesIO()
-	downloader = http.MediaIoBaseDownload(fh, request)
-	done = False
-	while done is False:
-    		status, done = downloader.next_chunk()
-    		print("Download %d%%." % int(status.progress() * 100))
+    #the plan here it to make an interupperable downloader
+    class downloader():
+        def __init__(self, service, file_id, export = None):
+            if export is None:
+	        self.request = service.files().get_media(fileId=file_id)
+            else:
+                self.request = service.files().export_media(fileId=file_id, mimeType=export)
 
-    def export(self, file_id, mimeType):
-        #request = self.service.files().export_media(fileId=file_id, mimeType=mimeType)
-        request = self.service.files().export_media(fileId=file_id, mimeType='application/pdf')
-        fh = io.BytesIO()
-        downloader = http.MediaIoBaseDownload(fh, request)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
-            print("Download %d%%." % int(status.progress() * 100))
+	    self.done = True
+
+        def start(self, file_handle = None, first_process = True):
+            if file_handle is None: 
+                self.file_handle = io.BytesIO()
+            else:
+	        self.file_handle = file_handle
+
+	    self.downloader = http.MediaIoBaseDownload(self.file_handle, self.request)
+	    self.done = False
+	    self.status = None
+
+            print("starting download")
+            if first_process: self.process()
+
+        #needs to be called on a while loop in order to pull big files
+        def process(self):
+    	    self.status, self.done = self.downloader.next_chunk()
+    	    print("Download %d%%." % int(self.status.progress() * 100))
+
+    def download(self, *args, **kargs):
+        return self.downloader(self.service, *args, **kargs)
+
+    #def download(self, file_id):
+    #    request = self.service.files().get_media(fileId=file_id)
+    #    fh = io.BytesIO()
+    #    downloader = http.MediaIoBaseDownload(fh, request)
+    #    done = False
+    #    while done is False:
+    #		status, done = downloader.next_chunk()
+    #		print("Download %d%%." % int(status.progress() * 100))
+
+    #def export(self, file_id, mimeType):
+    #    request = self.service.files().export_media(fileId=file_id, mimeType=mimeType)
+    #    fh = io.BytesIO()
+    #    downloader = http.MediaIoBaseDownload(fh, request)
+    #    done = False
+    #    while done is False:
+    #        status, done = downloader.next_chunk()
+    #        print("Download %d%%." % int(status.progress() * 100))
 
 
     """ 
@@ -174,6 +204,7 @@ class Drive():
     def get_root(self, name=None):
         results = self.search_name(DRIVE_ROOT_DIR)
         self.root = results[0]
+        self.root.set_parent(None) # needed for local lookup
         return self.root
 
     def search_name(self, name, contains= False, **kargs):

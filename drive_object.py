@@ -1,4 +1,51 @@
 
+direct_mime_types = [
+#Documents   
+    'text/html', # HTML    
+    'text/plain', # Plain text  
+    'application/rtf', # Rich text   
+    'application/pdf', # PDF  
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', # MS Word document    
+#Spreadsheets    
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # MS Excel    
+    'application/x-vnd.oasis.opendocument.spreadsheet', # Open Office sheet   
+    'application/pdf', # PDF  
+    'CSV (first sheet only)  text/csv', # 
+#Drawings    
+    'image/jpeg', # JPEG    
+    'image/png', # PNG  
+    'image/svg+xml', # SVG  
+    'application/pdf', # PDF  
+#Presentations
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation', # MS PowerPoint   
+    'application/pdf', # PDF  
+    'text/plain', # Plain text  
+#Apps Scripts    
+    'application/vnd.google-apps.script+json', # JSON    
+    ]
+
+mimetype_map = { 
+        'application/vnd.google-apps.audio' :       None, #
+        'application/vnd.google-apps.document' :    
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document', #    Google Docs to ms word
+        'application/vnd.google-apps.drawing' :     'image/svg+xml', # Google Drawing to SVG 
+        'application/vnd.google-apps.file' :        None, #    Google Drive file
+        'application/vnd.google-apps.folder' :      None, #  Google Drive folder
+        'application/vnd.google-apps.form' :        None, #    Google Forms
+        'application/vnd.google-apps.fusiontable' : None, # Google Fusion Tables
+        'application/vnd.google-apps.map Google' :  None, # My Maps
+        'application/vnd.google-apps.photo' :       'image/png', #photo to png
+        'application/vnd.google-apps.presentation' :
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation', #    Google Slides to MS PowerPoint 
+        'application/vnd.google-apps.script' :      None, #  Google Apps Scripts
+        'application/vnd.google-apps.sites' :       None, #   Google Sites
+        'application/vnd.google-apps.spreadsheet' : 
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # Google Sheets to MS spreadsheet
+            
+        'application/vnd.google-apps.unknown' :     None, # 
+        'application/vnd.google-apps.video' :       None, #   
+        }
+
 """
     an object for a particular file or folder in google drive
 """
@@ -26,12 +73,15 @@ class File_object():
         self.children = None
 
         #resolved path in the file tree
+        self.dir = "" 
         self.path = "" 
         self.local_dir = "" 
         self.local_path = "" 
 
         self.pull = False
         self.push = False
+        self.file_handle = None
+        self.downloader = None
 
     #ls wrapper so ls can be called on an oject and its children will be returned
     def ls(self, force = False, *args, **kargs):
@@ -49,7 +99,8 @@ class File_object():
         return string
 
     def pwd_string(self):
-        return self.path + self.name
+        if not self.parent: return "/"
+        return self.parent.path
 
     def __str__(self):
         return self.as_string()
@@ -57,10 +108,14 @@ class File_object():
     def as_string(self, tab = 0, details=False, json=False, *args, **kargs):
         string = ""
         if json: string += "%s\t " % self.json
-        if details: string += "%s\t " % self.id
-        if details: string += "%s\t " % self.mimeType
-        if details: string += "%s\t " % self.trashed
-        if details: string += "%s\t " % self.parents
+        if details: string += "id: %s\n" % self.id
+        if details: string += "mimeType: %s\n" % self.mimeType
+        #if details: string += "trashed %s\n" % self.trashed
+        if details: string += "parent: %s\n" % self.parent
+        if details: string += "parents: %s\n" % self.parents
+        if details: string += "path: %s\n" % self.path
+        if details: string += "local_path:%s\n" % self.local_path
+        if details: string += "local_dir: %s\n" % self.local_dir
         if self.folder: string += "D " 
         else: string += "\t" 
         if not self.check_local(): string += "N "
@@ -73,7 +128,11 @@ class File_object():
     # sets the parent oject that caled LS to this object in order to build up a folder structure
     def set_parent(self, parent):
         self.parent = parent
-        self.path += parent.path + parent.name + "/"
+        if not parent: self.dir = "/"
+        else: self.dir = parent.path + "/"
+
+        self.path = self.dir + self.name
+
         self.local_dir, self.local_path  = self.local.get_path(self)
 
     # check if the local file exists
@@ -90,10 +149,25 @@ class File_object():
             print("adding folder: %s" % self)
             self.local.mkdir(self)
         else:
-            print("syncing file: %s" % self)
-            if not self.check_local():
-                #self.drive.download(self.id)
-                self.drive.export(self.id, self.mimeType)
+            print("syncing file: %s" % self.as_string(details = True))
+            if self.downloader is None:
+                #determine if its a raw download or an export
+                if self.mimeType in direct_mime_types: export_type = None
+                else: export_type = mimetype_map[self.mimeType]
+
+                #start a new downloader
+                self.downloader = self.drive.download(self.id, export = export_type)
+
+            self.file_handle = self.local.create_file(self)
+
+            self.downloader.start(self.file_handle)
+
+            #continue with / resume interupped download
+            while not self.downloader.done: self.downloader.process()
+
+            self.file_handle.close()
+
+
 
     def do_push(self):
         #TODO
