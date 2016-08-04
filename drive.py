@@ -1,22 +1,9 @@
-"""
-    Google drive python cli
-    initial instrucitons from
-    https://developers.google.com/drive/v3/web/quickstart/python
-
-    classes:
-    
-        File_object - handler for a file both on drive and on local
-        Drive - handler for the connection to google drive
-        Local - handler for the connection to local files
-"""
-
 from __future__ import print_function
-import httplib2
-import os, io
-import thread
-import traceback
-import sys
+from drive_object import File_object
+from local import Local
 
+import httplib2
+import io, os
 from apiclient import discovery, http
 import oauth2client
 from oauth2client import client
@@ -47,131 +34,6 @@ LOCAL_BACKUP_DIRECTORY = "../gdrive/"
 DRIVE_ROOT_DIR = "00 GDRIVE_NEW" #the drive directory we will synconsize
 
 """
-    an object for a particular file or folder in google drive
-"""
-class File_object():
-    def __init__(self, drive, json):
-        #backwards link to the drive object
-        self.drive = drive 
-
-        #reference to local object
-        if self.drive and self.drive.local: 
-            self.local = self.drive.local
-        else:
-            self.local = None
-
-        self.json = json
-        self.id = json.get('id')
-        self.name = json.get('name')
-
-        self.mimeType = json.get('mimeType')
-        self.folder = (self.mimeType == 'application/vnd.google-apps.folder')
-
-        self.trashed = json.get('trashed')
-        self.parents= json.get('parents')
-        self.parent = None
-        self.children = None
-
-        #resolved path in the file tree
-        self.path = "" 
-        self.local_dir = "" 
-        self.local_path = "" 
-
-        self.pull = False
-        self.push = False
-
-    #ls wrapper so ls can be called on an oject and its children will be returned
-    def ls(self, force = False, *args, **kargs):
-        if not self.children or force:
-            self.children = self.drive.ls(self,*args, **kargs)
-        return self.children
-
-    def ls_string(self, *args, **kargs):
-        ls = self.ls(*args, **kargs)
-        if not ls: return "Folder is empty"
-        string = ""
-        for i in ls:
-            string += "%s\n" % (i.as_string(*args,**kargs))
-
-        return string
-
-    def pwd_string(self):
-        return self.path + self.name
-
-    def __str__(self):
-        return self.as_string()
-        
-    def as_string(self, tab = 0, details=False, json=False, *args, **kargs):
-        string = ""
-        if json: string += "%s\t " % self.json
-        if details: string += "%s\t " % self.id
-        if details: string += "%s\t " % self.mimeType
-        if details: string += "%s\t " % self.trashed
-        if details: string += "%s\t " % self.parents
-        if self.folder: string += "D " 
-        else: string += "\t" 
-        if not self.check_local(): string += "N "
-        string += "\t"*tab
-        string += "%s\t " % self.name
-
-        #string += "%s\t " % self.local_path
-        return string
-
-    # sets the parent oject that caled LS to this object in order to build up a folder structure
-    def set_parent(self, parent):
-        self.parent = parent
-        self.path += parent.path + parent.name + "/"
-        self.local_dir, self.local_path  = self.local.get_path(self)
-
-    # check if the local file exists
-    def check_local(self):
-        return self.local.exists(self)
-
-    #pull the file down from the server and replace the current one
-    def sync(self):
-        if self.pull: self.do_pull()
-        elif self.push: self.do_push()
-
-    def do_pull(self):
-        if self.folder:
-            print("adding folder: %s" % self)
-            self.local.mkdir(self)
-        else:
-            print("syncing file: %s" % self)
-            if not self.check_local():
-                #self.drive.download(self.id)
-                self.drive.export(self.id, self.mimeType)
-
-    def do_push(self):
-        #TODO
-
-"""
-    The class that sepecifies what happens on the local side
-"""
-class Local():
-    def __init__(self, root):
-        self.root = root
-
-    #get the local path of a file or dir object
-    def get_path(self, obj):
-        directory = "%s%s" % (self.root,obj.path)
-        path = "%s%s" % (directory,obj.name)
-        return (directory, path)
-
-    #returns true if the local path exists
-    def exists(self, obj):
-        if "/" in obj.name:
-            print("warning: some 'person' has put a forward slash in a name!\t dir: %s file: %s" % (obj.path, obj.name))
-        d,p = self.get_path(obj)
-        return (obj.path and os.path.exists(p))
-
-    def mkdir(self, obj):
-        d,p = self.get_path(obj)
-        if obj.path: 
-            os.mkdir(p)
-
-
-"""
     the connection and commands to google drive
 """
 class Drive():
@@ -180,12 +42,12 @@ class Drive():
     Creates a Google Drive API service object and outputs the names and IDs
     for up to 10 files.
     """
-    def __init__(self, local=None):
+    def __init__(self):
         credentials = self.get_credentials()
         http = credentials.authorize(httplib2.Http())
         self.service = discovery.build('drive', 'v3', http=http)
 
-        self.local=Local(local)
+        self.local=Local(LOCAL_BACKUP_DIRECTORY)
 
         self.check_interrupt = False
         self.check_ready = True
@@ -383,6 +245,7 @@ class Drive():
                 if not pwd.check_local():
                     self.check_counters[pwd.check_depth-1].new_folders += 1
                     if pull:
+                        pwd.pull = True
                         self.sync_queue.append(pwd)
 
             else:
@@ -393,6 +256,7 @@ class Drive():
                     #self.check_counters[pwd.check_depth-1].different += 1
                     self.check_counters[pwd.check_depth-1].new += 1
                     if pull and not dirs_only:
+                        pwd.pull = True
                         self.sync_queue.append(pwd)
 
             ls = pwd.ls(force = force)
@@ -427,157 +291,3 @@ class Drive():
         return string
         
         
-class CLI():
-    def __init__(self, drive):
-        self.options = {
-            '': self.do_nothing, 
-            'q': self.end_run,
-            'exit': self.end_run,
-            'pwd': self.show_pwd, 
-            'ls': self.show_ls, 
-            'cd': self.change_dir, 
-            'details': self.details, 
-            'check': self.background_check,
-            'report': self.report,
-            'pull': self.background_pull,
-                }
-
-        self.auto_check = True
-        self.prompt = " H> " 
-        self.drive = drive
-        self.root =  g.get_root() 
-        self.pwd =  self.root
-        self.ui = []
-        self.show_ls()
-        #self.background_check()
-
-    def report(self):
-        print(self.drive.as_string())
-
-    def do_nothing(self):
-        pass
-
-    def background_pull(self):
-        dirs = ("dirs" in self.ui) or ("directories" in self.ui)
-        after = "after" in self.ui 
-        self.background_check(pull=True, dirs_only = dirs, )
-
-    """
-        runs check on the drive as a seperate thread that that builds up the file structure in the back ground
-    """
-    def background_check(self, stop = None, depth = None, force = None, pull=False, dirs_only=False):
-        if depth is None:
-            for i in self.ui:
-                if isinstance(i,int): depth = i
-
-        if stop is None: stop = "stop" in self.ui 
-        if force is None: force = "force" in self.ui 
-
-        if "auto_off" in self.ui: self.auto_check = False
-        if "auto_on" in self.ui: self.auto_check = True
-
-        def threadded_check():
-            try:
-                self.drive.check( self.pwd, depth = depth, pull=pull,dirs_only=dirs_only)
-            except KeyboardInterrupt: #abort with contorl C
-                pass
-            except Exception, err:
-                exc_info = sys.exc_info()
-                traceback.print_exception(*exc_info)
-
-            self.drive.check_ready = True
-
-        self.drive.wait_for_ready()
-
-        if not stop and self.auto_check:
-            print("starting background check")
-            thread.start_new_thread(threadded_check, ())
-
-    def details(self):
-        self.background_check(stop=True)
-        f = self.select_file()
-        if f: print(f.as_string(details = True))
-        self.background_check()
-
-    def change_dir(self):
-        self.background_check(stop=True)
-
-        new_dir =  self.select_file() 
-        if new_dir is not None: 
-            self.pwd = new_dir
-            print("changing to: %s" % self.pwd)
-            self.show_ls(tab=1,new_line = 1)
-        else:
-            print("no dir matched")
-
-        self.background_check()
-
-    def select_file(self):
-
-        if len(self.ui) < 2: return None
-        else: next_dir = "%s" % self.ui[1]
-
-        if "/" in next_dir: return self.root
-
-        if ".." in next_dir:
-            if self.pwd.parent is None: print("no parent")
-            return self.pwd.parent
-
-        if next_dir[0] == '.':
-            return self.pwd
-
-        ls = self.pwd.ls()
-        
-        if ls is None: 
-            print("No sub files or folders")
-            return None
-
-        for i in ls:
-            if next_dir.lower() in i.name.lower():
-                #print("found %s (matched %s)"  % (i.name,next_dir))
-                return i
-
-        return None
-
-
-    def show_ls(self, tab=1, *args, **kargs):
-        force = "force" in self.ui
-        self.background_check(stop=True)
-        print(self.pwd.ls_string(force = force, tab = tab, *args, **kargs))
-
-    def show_pwd(self):
-        print("%s" % self.pwd.pwd_string())
-
-    def end_run(self):
-        self.end = True
-        
-    def run(self):
-        self.end = False
-        while not self.end :
-            self.ui = raw_input(self.prompt).split()
-
-            if not self.ui: continue
-
-            # make ints out of int arguements
-            if self.ui[0] != "cd":
-                for i,v in enumerate(self.ui):
-                    try:
-                        self.ui[i] = int(v)
-                    except:
-                        pass
-
-            #print(self.ui)
-
-            try:
-                function = self.options[self.ui[0]]
-            except:
-                print("command unknown")
-                function = None
-
-            if function: function()
-
-if __name__ == '__main__':
-    g = Drive(local = LOCAL_BACKUP_DIRECTORY)
-    c = CLI(g)
-#    c.show_pwd()
-    c.run()
