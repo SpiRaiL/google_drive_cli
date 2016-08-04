@@ -153,7 +153,9 @@ class File_object():
             if self.downloader is None:
                 #determine if its a raw download or an export
                 if self.mimeType in direct_mime_types: export_type = None
-                else: export_type = mimetype_map[self.mimeType]
+                elif self.mimeType in mimetype_map:
+                    export_type = mimetype_map[self.mimeType]
+                else: export_type = None
 
                 #start a new downloader
                 self.downloader = self.drive.download(self.id, export = export_type)

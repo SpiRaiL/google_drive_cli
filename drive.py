@@ -54,6 +54,7 @@ class Drive():
         self.check_counters = []
 
         self.sync_queue = []
+        self.syncing = None
         self.check_prioity_depth = 1 #the depth to check for files before procuessing the sync queue
 
     """ 
@@ -133,6 +134,7 @@ class Drive():
                 self.request = service.files().export_media(fileId=file_id, mimeType=export)
 
 	    self.done = True
+            self.part = 0
 
         def start(self, file_handle = None, first_process = True):
             if file_handle is None: 
@@ -144,35 +146,19 @@ class Drive():
 	    self.done = False
 	    self.status = None
 
+            self.part = 0
+
             print("starting download")
             if first_process: self.process()
 
         #needs to be called on a while loop in order to pull big files
         def process(self):
+            self.part += 1
     	    self.status, self.done = self.downloader.next_chunk()
-    	    print("Download %d%%." % int(self.status.progress() * 100))
+    	    #print("Download %d%%. (part %s)" % (int(self.status.progress() * 100), self.part))
 
     def download(self, *args, **kargs):
         return self.downloader(self.service, *args, **kargs)
-
-    #def download(self, file_id):
-    #    request = self.service.files().get_media(fileId=file_id)
-    #    fh = io.BytesIO()
-    #    downloader = http.MediaIoBaseDownload(fh, request)
-    #    done = False
-    #    while done is False:
-    #		status, done = downloader.next_chunk()
-    #		print("Download %d%%." % int(status.progress() * 100))
-
-    #def export(self, file_id, mimeType):
-    #    request = self.service.files().export_media(fileId=file_id, mimeType=mimeType)
-    #    fh = io.BytesIO()
-    #    downloader = http.MediaIoBaseDownload(fh, request)
-    #    done = False
-    #    while done is False:
-    #        status, done = downloader.next_chunk()
-    #        print("Download %d%%." % int(status.progress() * 100))
-
 
     """ 
         api wrappers
@@ -231,8 +217,8 @@ class Drive():
 
     def process_sync_queue(self):
         while not self.check_interrupt and self.sync_queue:
-            pwd = self.sync_queue.pop(0)
-            pwd.sync()
+            self.syncing = self.sync_queue.pop(0)
+            self.syncing.sync()
 
     def check(self, directory, depth = None, force = False, silent = True, pull=False, dirs_only=False):
         self.check_ready = False
@@ -309,6 +295,13 @@ class Drive():
 
     def as_string(self):
         string = "\n" 
+
+        if self.syncing:
+            string += "Sycning %s / %s \n" % (self.syncing.dir,self.syncing.name)
+            string += "progress: %s%%,  part: %s \n" % (
+                    self.syncing.downloader.status.progress() * 100,
+                    self.syncing.downloader.part)
+    	    #print("Download %d%%. (part %s)" % (int(self.status.progress() * 100), self.part))
 
         string += "Syncronisation queue has %s tasks left\n" % len(self.sync_queue)
 

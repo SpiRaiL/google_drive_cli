@@ -32,4 +32,4 @@ class Local():
 
     def create_file(self, obj):
         d,p = self.get_path(obj)
-        return open(p + '.currently_downloading','w') #TODO interuptable return open(p + '.download','w')
+        return open(p + '.incomplete_download','w') #TODO interuptable return open(p + '.download','w')
