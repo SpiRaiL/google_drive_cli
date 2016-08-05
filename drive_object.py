@@ -82,6 +82,7 @@ class File_object():
         self.push = False
         self.file_handle = None
         self.downloader = None
+        self.error = None
 
     #ls wrapper so ls can be called on an oject and its children will be returned
     def ls(self, force = False, *args, **kargs):
@@ -121,6 +122,7 @@ class File_object():
         if not self.check_local(): string += "N "
         string += "\t"*tab
         string += "%s\t " % self.name
+        if details and self.error: string += "erorr: %s\n" % self.error
 
         #string += "%s\t " % self.local_path
         return string

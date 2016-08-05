@@ -56,7 +56,10 @@ class Drive():
         self.sync_queue = []
         self.syncing = None
         self.check_prioity_depth = 1 #the depth to check for files before procuessing the sync queue
+        self.failed_sync = []
 
+        self.echo_on = False
+        self.logs = []
     """ 
         functions using the google drive API 
     """
@@ -137,7 +140,7 @@ class Drive():
             self.part = 0
 	    self.status = None
 
-        def start(self, file_handle = None, first_process = True):
+        def start(self, file_handle = None):#, first_process = True):
             if file_handle is None: 
                 self.file_handle = io.BytesIO()
             else:
@@ -150,7 +153,7 @@ class Drive():
             self.part = 0
 
             #print("starting download")
-            if first_process: self.process()
+            #if first_process: self.process()
 
         #needs to be called on a while loop in order to pull big files
         def process(self):
@@ -222,7 +225,16 @@ class Drive():
         while not self.check_interrupt and self.sync_queue:
             if self.syncing and self.syncing.downloader: 
                 if not self.syncing.downloader.done:
-                    self.syncing.downloader.process()
+                    try:
+                        self.syncing.downloader.process()
+                    except Exception, err:
+                        self.syncing.complete_pull()
+                        self.syncing.downloader.done = True
+                        self.syncing.error = sys.exc_info()
+                        self.failed_sync.append(self.syncing)
+                        self.log("syncing: %s" % self.syncing.as_string(details=True))
+                        self.syncing = None
+                        self.sync_queue.pop(0)
                 else:
                     self.syncing.complete_pull()
                     self.sync_queue.pop(0)
@@ -230,6 +242,8 @@ class Drive():
             else:
                 self.syncing = self.sync_queue[0]
                 self.syncing.sync()
+
+                self.log("syncing: %s" % self.syncing)
 
                 #drop if its a folder
                 if self.syncing.folder: 
@@ -274,6 +288,7 @@ class Drive():
                 self.check_counters.append(counter(depth = pwd.check_depth)) 
 
             if pwd.folder:
+                self.log("checking folder: %s" % pwd.path)
                 self.check_counters[pwd.check_depth-1].folders += 1
                 if not pwd.check_local():
                     self.check_counters[pwd.check_depth-1].new_folders += 1
@@ -302,21 +317,42 @@ class Drive():
             object_pointer+=1
 
         if not silent:
-            print("files found at depth: %s" % self.check_counters)
+            self.log("files found at depth: %s" % self.check_counters)
 
         #needs to be here as well so it is processed if ALL checks have been made
         self.process_sync_queue()
 
         self.check_ready = True
 
-    def as_string(self):
+    def echo(self, on):
+        if on:
+            self.echo_on = True
+            print("printing to screen, press enter stop printing")
+        else:
+            if self.echo_on:
+                print("echo is off (because you pressed enter) type echo on to see whats happening in the background")
+                self.echo_on = False
+
+    def as_string(self, failed = False):
         string = "\n" 
 
         if self.syncing and self.syncing.downloader and self.syncing.downloader.status:
             string += "Sycning file %s%s \n" % (self.syncing.dir,self.syncing.name)
-            string += "progress: %s%%,  part: %s \n" % (
+            try:
+                string += "progress: %s%%,  part: %s \n" % (
                     self.syncing.downloader.status.progress() * 100,
                     self.syncing.downloader.part)
+            except Exception, err:
+                string += "failed to get sync data\n"
+                exc_info = sys.exc_info()
+                traceback.print_exception(*exc_info)
+
+        if self.failed_sync:
+            string += "\n failed to sync %s objects" % len(self.failed_sync)
+            if failed:
+                for i in self.failed_sync:
+                    string += i.as_string(details = True) 
+            
 
         string += "Syncronisation queue has %s tasks left\n" % len(self.sync_queue)
 
@@ -329,4 +365,18 @@ class Drive():
                         i, c.folders, c.new_folders, c.files, c.same, c.new)
         return string
         
-        
+    def log(self, string):
+        self.logs.append(string)
+        if self.echo_on:
+            print(string)
+
+    def print_log(self, last = None):
+        if last is None or last>len(self.logs):
+            logs = self.logs
+        elif last == 0:
+            return
+        else:
+            logs = self.logs[-last:]
+
+
+        for l in logs: print(l)

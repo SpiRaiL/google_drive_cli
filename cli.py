@@ -19,16 +19,18 @@ import sys
 class CLI():
     def __init__(self, drive):
         self.options = {
-            '': self.do_nothing, 
-            'q': self.end_run,
-            'exit': self.end_run,
-            'pwd': self.show_pwd, 
-            'ls': self.show_ls, 
-            'cd': self.change_dir, 
-            'details': self.details, 
-            'check': self.background_check,
-            'report': self.report,
-            'pull': self.background_pull,
+            '':         [self.do_nothing,       ''], 
+            'q':        [self.end_run,          ''],
+            'exit':     [self.end_run,          'quit the cli'],
+            'pwd':      [self.show_pwd,         'print the working directory'],
+            'ls':       [self.show_ls,          'list the file in this dir'], 
+            'cd':       [self.change_dir,       '[search option] change directory'], 
+            'details':  [self.details,          '[search option] print the file details'], 
+            'check':    [self.background_check, 'Recursivly check for new files'],
+            'pull':     [self.background_pull,  'Recursivly download new files'],
+            'report':   [self.report,           'report on background check and download'],
+            'log':      [self.log,              'print check and pull log'],
+            'help':     [self.help,             'print this list'],
                 }
 
         self.auto_check = True
@@ -38,18 +40,43 @@ class CLI():
         self.pwd =  self.root
         self.ui = []
         self.show_ls()
+        print("type help to see command list")
         #self.background_check()
 
+    def help(self):
+        string = ""
+        for o,v in self.options.iteritems():
+            text = v[1]
+            if o:
+                string += "\t" 
+                if not text:
+                    string += ("%s, " % o)
+                else:
+                    string += "%s :\t%s\n" % (o,text)
+        print (string)
+
     def report(self):
-        print(self.drive.as_string())
+        failed = "failed" in self.ui 
+        print(self.drive.as_string(failed))
 
     def do_nothing(self):
         pass
+
+    def log(self):
+        last = None
+        for i in self.ui:
+            if isinstance(i,int): last = i
+        self.drive.print_log(last = last)
+        self.drive.echo(True)
+
+    def echo_on(self):
+        self.drive.echo(True)
 
     def background_pull(self):
         dirs = ("dirs" in self.ui) or ("directories" in self.ui)
         after = "after" in self.ui 
         self.background_check(pull=True, dirs_only = dirs, )
+        self.drive.echo(True)
 
     """
         runs check on the drive as a seperate thread that that builds up the file structure in the back ground
@@ -81,6 +108,7 @@ class CLI():
         if not stop and self.auto_check:
             print("starting background check")
             thread.start_new_thread(threadded_check, ())
+
 
     def details(self):
         self.background_check(stop=True)
@@ -144,6 +172,7 @@ class CLI():
         self.end = False
         while not self.end :
             self.ui = raw_input(self.prompt).split()
+            self.drive.echo(False)
 
             if not self.ui: continue
 
@@ -158,7 +187,9 @@ class CLI():
             #print(self.ui)
 
             try:
-                function = self.options[self.ui[0]]
+                #get function by name, then pull out first element in the self.options. 
+                #This is where the function is
+                function = self.options[self.ui[0]][0]
             except:
                 print("command unknown")
                 function = None
