@@ -122,7 +122,7 @@ class File_object():
         if not self.check_local(): string += "N "
         string += "\t"*tab
         string += "%s\t " % self.name
-        if details and self.error: string += "erorr: %s\n" % self.error
+        if details and self.error: string += "error: %s\n" % (self.error)
 
         #string += "%s\t " % self.local_path
         return string

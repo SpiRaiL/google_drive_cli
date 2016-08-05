@@ -3,7 +3,7 @@ from drive_object import File_object
 from local import Local
 
 import httplib2
-import io, os
+import io, os, sys, traceback
 from apiclient import discovery, http
 import oauth2client
 from oauth2client import client
@@ -60,6 +60,7 @@ class Drive():
 
         self.echo_on = False
         self.logs = []
+        self.templog = False
     """ 
         functions using the google drive API 
     """
@@ -159,7 +160,6 @@ class Drive():
         def process(self):
             self.part += 1
     	    self.status, self.done = self.downloader.next_chunk()
-    	    #print("Download %d%%. (part %s)" % (int(self.status.progress() * 100), self.part))
             if self.done:
                 self.file_handle.close()
 
@@ -227,10 +227,12 @@ class Drive():
                 if not self.syncing.downloader.done:
                     try:
                         self.syncing.downloader.process()
+                        self.log("Progress: %0.4f%% (part %s)" % (float(self.syncing.downloader.status.progress() * 100), self.syncing.downloader.part), temp = True)
                     except Exception, err:
                         self.syncing.complete_pull()
                         self.syncing.downloader.done = True
-                        self.syncing.error = sys.exc_info()
+                        #self.syncing.error = sys.exc_info()
+                        self.syncing.error = traceback.format_exc()
                         self.failed_sync.append(self.syncing)
                         self.log("syncing: %s" % self.syncing.as_string(details=True))
                         self.syncing = None
@@ -330,7 +332,7 @@ class Drive():
             print("printing to screen, press enter stop printing")
         else:
             if self.echo_on:
-                print("echo is off (because you pressed enter) type echo on to see whats happening in the background")
+                print("printing stopped. Type report to see current tasks, type log or log 0 to resume printing")
                 self.echo_on = False
 
     def as_string(self, failed = False):
@@ -365,10 +367,19 @@ class Drive():
                         i, c.folders, c.new_folders, c.files, c.same, c.new)
         return string
         
-    def log(self, string):
-        self.logs.append(string)
+    def log(self, string, temp = False):
+        #temp if for temporay logs printed to screen, ie: % progress
+        if not temp: self.logs.append(string)
+
         if self.echo_on:
-            print(string)
+            if self.templog: 
+                print("\r                                                      ", end="\r"), #overwite 
+            if temp:
+                print(string, end="")
+                sys.stdout.flush()
+            else:
+                print(string) #normal operation
+            self.templog = temp
 
     def print_log(self, last = None):
         if last is None or last>len(self.logs):
