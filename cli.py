@@ -13,6 +13,7 @@
 from drive import Drive
 
 import thread
+import code 
 import traceback
 import sys
 
@@ -37,11 +38,11 @@ class CLI():
         self.auto_check = True
         self.prompt = " H> " 
         self.drive = drive
-        self.root =  g.get_root() 
+        self.root =  drive.get_root() 
         self.pwd =  self.root
         self.ui = []
         self.show_ls()
-        print("type help to see command list")
+        print("type help to see command list.")
         self.background_check()
 
     def help(self):
@@ -54,6 +55,13 @@ class CLI():
                     string += ("%s, " % o)
                 else:
                     string += "%s :\t%s\n" % (o,text)
+
+        string += "\nhint: Run python -i cli with and type exit to get access to the drive object, \n"
+        string += "\tthe main check thread will keep going and build up the found file lists in \n"
+        string += "\tie: try len(drive.files) to see how many files are collected\n"
+        string += "\tmost cli commands can be accessed directly with cli.<commmand>() like cli.help()\n"
+        string += "\ttype cli.run() to get back to this cli, or exit() to quit completely\n"
+
         print (string)
 
     def report(self):
@@ -201,7 +209,6 @@ class CLI():
             if function: function()
 
 if __name__ == '__main__':
-    g = Drive()
-    c = CLI(g)
-#    c.show_pwd()
-    c.run()
+    drive = Drive()
+    cli = CLI(drive)
+    cli.run()

@@ -49,6 +49,8 @@ class Drive():
 
         self.local=Local(LOCAL_BACKUP_DIRECTORY)
 
+        self.files = [] # all files ever found
+
         self.check_interrupt = False
         self.check_ready = True
         self.check_counters = []
@@ -115,6 +117,7 @@ class Drive():
                 f = File_object(self,file)
                 if trash or not f.trashed:
                     self.file_list.append(f)
+                    self.files.append(f) #adds to the main list of this drive
 
             page_token = response.get('nextPageToken', None)
             if page_token is None:
