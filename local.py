@@ -15,6 +15,10 @@ class Local():
             directory = "%s/" % (obj.parent.local_path)
 
         path = "%s%s" % (directory,obj.name.replace("/", "%2F") )
+
+        if obj.local_extension:
+            path += "." + obj.local_extension
+
         return (directory, path)
 
     #returns true if the local path exists

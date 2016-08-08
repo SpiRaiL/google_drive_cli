@@ -27,20 +27,20 @@ direct_mime_types = [
 mimetype_map = { 
         'application/vnd.google-apps.audio' :       None, #
         'application/vnd.google-apps.document' :    
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document', #    Google Docs to ms word
-        'application/vnd.google-apps.drawing' :     'image/svg+xml', # Google Drawing to SVG 
+        {'map':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','ext':'docx'}, #    Google Docs to ms word
+        'application/vnd.google-apps.drawing' :     {'map':'image/svg+xml','ext':'svg'}, # Google Drawing to SVG 
         'application/vnd.google-apps.file' :        None, #    Google Drive file
         'application/vnd.google-apps.folder' :      None, #  Google Drive folder
         'application/vnd.google-apps.form' :        None, #    Google Forms
         'application/vnd.google-apps.fusiontable' : None, # Google Fusion Tables
         'application/vnd.google-apps.map Google' :  None, # My Maps
-        'application/vnd.google-apps.photo' :       'image/png', #photo to png
+        'application/vnd.google-apps.photo' :       {'map':'image/png','ext':'png'}, #photo to png
         'application/vnd.google-apps.presentation' :
-            'application/vnd.openxmlformats-officedocument.presentationml.presentation', #    Google Slides to MS PowerPoint 
+        {'map':'application/vnd.openxmlformats-officedocument.presentationml.presentation','ext':'pptx'}, #    Google Slides to MS PowerPoint 
         'application/vnd.google-apps.script' :      None, #  Google Apps Scripts
         'application/vnd.google-apps.sites' :       None, #   Google Sites
         'application/vnd.google-apps.spreadsheet' : 
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # Google Sheets to MS spreadsheet
+        {'map':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','ext':'xlsx'}, # Google Sheets to MS spreadsheet
             
         'application/vnd.google-apps.unknown' :     None, # 
         'application/vnd.google-apps.video' :       None, #   
@@ -77,6 +77,12 @@ class File_object():
         self.path = "" 
         self.local_dir = "" 
         self.local_path = "" 
+        self.local_extension = None
+        if self.mimeType in mimetype_map:
+            mapping =  mimetype_map[self.mimeType]
+            if mapping and 'ext' in mapping:
+                self.local_extension = mapping['ext']
+
 
         self.pull = False
         self.push = False
@@ -100,8 +106,8 @@ class File_object():
         return string
 
     def pwd_string(self):
-        if not self.parent: return "/"
-        return self.parent.path
+        #if not self.parent: return "/"
+        return self.path
 
     def __str__(self):
         return self.as_string()
@@ -157,6 +163,10 @@ class File_object():
                 if self.mimeType in direct_mime_types: export_type = None
                 elif self.mimeType in mimetype_map:
                     export_type = mimetype_map[self.mimeType]
+                    if export_type and 'map' in export_type:
+                        return #TODO - exporting is disabled for now
+                        export_type = mimetype_map[self.mimeType]['map']
+                    else: export_type = None
                 else: export_type = None
 
                 #start a new downloader

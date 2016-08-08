@@ -186,7 +186,7 @@ class Drive():
         while not self.check_ready:
             counter += 1
         if counter:
-            print('wait counter: %s' % counter)
+            self.log('background stop wait counter: %s' % counter)
 
         self.check_interrupt = False
         #self.check_ready = True # redundant
@@ -234,7 +234,7 @@ class Drive():
                         #self.syncing.error = sys.exc_info()
                         self.syncing.error = traceback.format_exc()
                         self.failed_sync.append(self.syncing)
-                        self.log("syncing: %s" % self.syncing.as_string(details=True))
+                        self.log("error on: %s" % self.syncing.as_string(details=True))
                         self.syncing = None
                         self.sync_queue.pop(0)
                 else:
@@ -245,10 +245,10 @@ class Drive():
                 self.syncing = self.sync_queue[0]
                 self.syncing.sync()
 
-                self.log("syncing: %s" % self.syncing)
+                self.log("syncing: %s" % self.syncing.path)
 
-                #drop if its a folder
-                if self.syncing.folder: 
+                #drop if its a folder or the downloader did not get created
+                if self.syncing.downloader is None:
                     self.sync_queue.pop(0)
                     self.syncing = None
 

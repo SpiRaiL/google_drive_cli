@@ -28,6 +28,7 @@ class CLI():
             'details':  [self.details,          '[search option] print the file details'], 
             'check':    [self.background_check, 'Recursivly check for new files'],
             'pull':     [self.background_pull,  'Recursivly download new files'],
+            'stop':     [self.stop,             'stop check or pull'],
             'report':   [self.report,           'report on background check and download'],
             'log':      [self.log,              'print check and pull log'],
             'help':     [self.help,             'print this list'],
@@ -41,7 +42,7 @@ class CLI():
         self.ui = []
         self.show_ls()
         print("type help to see command list")
-        #self.background_check()
+        self.background_check()
 
     def help(self):
         string = ""
@@ -71,6 +72,9 @@ class CLI():
 
     def echo_on(self):
         self.drive.echo(True)
+
+    def stop(self):
+        self.background_check(stop=True)
 
     def background_pull(self):
         dirs = ("dirs" in self.ui) or ("directories" in self.ui)
